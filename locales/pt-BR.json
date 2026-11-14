@@ -379,5 +379,6 @@
   "log_hosts_run": "Para mudar o arquivo hosts, rode num terminal (ele pede a sua senha):",
   "unix_updates_note": "Linux e macOS (prévia): Apache, PHP, MySQL, MariaDB, PostgreSQL e Redis vêm do gerenciador de pacotes (apt, dnf, Homebrew); Instalar usa o que já está neste computador, com as configurações, dados e portas do próprio Ninho. Mailpit e Node.js são baixados dos sites oficiais. Os servidores rodam com o seu usuário, por isso o Apache fica na porta 8080: portas abaixo de 1024 pedem administrador.",
   "unix_missing": "não está neste computador",
-  "install_app_unavailable": "Instalar ainda não está disponível no macOS: rode o Ninho de qualquer pasta."
+  "install_app_unavailable": "Instalar ainda não está disponível no macOS: rode o Ninho de qualquer pasta.",
+  "unix_mysql_apparmor": "O perfil do AppArmor do Ubuntu só deixa o mysqld usar /var/lib/mysql. Use o MariaDB no Ninho, ou libere outras pastas para o MySQL com: sudo aa-complain /usr/sbin/mysqld"
 }

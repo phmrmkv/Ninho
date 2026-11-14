@@ -381,7 +381,11 @@ fn finish(shared: &Shared, s: &Settings, tool: &str, kind_dir: &Path, vdir: &Pat
                     // Linux and macOS: say why (Ubuntu's AppArmor profile for mysqld only allows /var/lib/mysql...).
                     #[cfg(unix)]
                     if let (false, Ok(o)) = (ok, &out) {
-                        shared.say(format!("MySQL: {}", String::from_utf8_lossy(&o.stderr).lines().filter(|l| l.contains("ERROR")).last().unwrap_or("").trim()));
+                        let why: Vec<String> = String::from_utf8_lossy(&o.stderr).lines().filter(|l| l.contains("ERROR") && !l.contains("Aborting")).map(|l| l.trim().to_string()).collect();
+                        shared.say(format!("MySQL: {}", why.join(" | ")));
+                        if Path::new("/etc/apparmor.d/usr.sbin.mysqld").is_file() {
+                            shared.say(format!("MySQL: {}", tr(lang, "unix_mysql_apparmor")));
+                        }
                     }
                 }
             }

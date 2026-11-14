@@ -379,5 +379,6 @@
   "log_hosts_run": "To change the hosts file, run in a terminal (it asks for your password):",
   "unix_updates_note": "Linux and macOS (preview): Apache, PHP, MySQL, MariaDB, PostgreSQL and Redis come from your package manager (apt, dnf, Homebrew); Install uses the one on this computer, with Ninho's own settings, data and ports. Mailpit and Node.js are downloaded from their official sites. Servers run as you, so Apache listens on 8080: ports below 1024 need administrator rights.",
   "unix_missing": "not on this computer",
-  "install_app_unavailable": "Installing is not available on macOS yet: run Ninho from any folder."
+  "install_app_unavailable": "Installing is not available on macOS yet: run Ninho from any folder.",
+  "unix_mysql_apparmor": "Ubuntu's AppArmor profile for mysqld only lets it use /var/lib/mysql. Use MariaDB in Ninho, or let MySQL use other folders with: sudo aa-complain /usr/sbin/mysqld"
 }

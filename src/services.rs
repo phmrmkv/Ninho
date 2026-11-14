@@ -605,7 +605,9 @@ pub fn start(shared: &Arc<Shared>, s: &Settings, id: &str) {
     shared.set_busy(id, true);
     if c.key == "mysql" {
         if let Some(data) = mysql_data(s, &c, &vdir) {
-            if c.is_extra() && !mysql_init(shared, lang, &vdir, &data) {
+            // Linux and macOS: the first MySQL too, so a data folder that could not be made at install time (Ubuntu's
+            // AppArmor...) is made at the next start, once the cause is fixed.
+            if (c.is_extra() || cfg!(unix)) && !mysql_init(shared, lang, &vdir, &data) {
                 shared.set_busy(id, false);
                 return;
             }

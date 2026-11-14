@@ -55,20 +55,25 @@ jobs:
         run: |
           set -x
           B=$PWD/target/${{ matrix.target }}/release/ninho
-          sudo apt-get install -y -qq redis-server > /dev/null
+          sudo apt-get install -y -qq redis-server apache2 > /dev/null
           sudo systemctl stop redis-server || true
           mkdir -p ~/Ninho/www && echo '<?php echo "ninho-" . "ok";' > ~/Ninho/www/index.php
-          $B --install php redis postgres mysql mailpit
+          $B --install php redis postgres mysql mailpit apache
           cat ~/Ninho/tmp/ninho-install.log
           ls -la ~/Ninho/bin/*/*
-          $B start php redis postgres mailpit
+          $B start php redis postgres mailpit apache
+          cat ~/Ninho/bin/apache/*/conf/httpd.conf; cat ~/Ninho/bin/apache/*/logs/error.log || true
           $B status --json | tee status.json
           curl -fsS http://localhost:8000/ | grep ninho-ok
-          for id in php redis postgres; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="running"' status.json; done
-          # Informational: MySQL under Ubuntu's AppArmor profile, and Mailpit downloaded from GitHub.
+          curl -fsS http://127.0.0.1:8080/ | grep ninho
+          for id in php redis postgres apache; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="running"' status.json; done
+          # Informational: MySQL is held to /var/lib/mysql by Ubuntu's AppArmor profile; with the profile off, the
+          # next start makes Ninho's data folder and runs it.
+          sudo aa-status 2>/dev/null | grep -i mysql || true
+          sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld || true
           $B start mysql || true
           $B status
           tail -n 15 ~/Ninho/data/mysql-*/mysqld.log || true
-          $B stop php redis postgres mailpit mysql
+          $B stop php redis postgres mailpit mysql apache
           $B status --json | tee after.json
-          for id in php redis postgres; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="stopped"' after.json; done
+          for id in php redis postgres apache; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="stopped"' after.json; done
