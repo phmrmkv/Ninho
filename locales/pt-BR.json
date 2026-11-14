@@ -373,5 +373,15 @@
   "sites_count_one": "site",
   "sites_count_many": "sites",
   "create_db_go": "Criar banco",
-  "import_none_here": "Não há nada para importar nessa pasta."
+  "import_none_here": "Não há nada para importar nessa pasta.",
+  "home_sites": "Sites",
+  "home_no_sites": "Nenhum site ainda. Crie uma pasta na pasta www e atualize os sites no Ninho.",
+  "home_servers": "Servidores",
+  "home_tools": "Ferramentas",
+  "home_mail": "Caixa de entrada do Mailpit",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "Você tem um arquivo index próprio na pasta www. Esta página aparece aqui; o seu arquivo está em",
+  "home_footer": "Esta página é feita pelo Ninho e gravada de novo quando os sites são atualizados ou os servidores iniciam.",
+  "home_page_pref": "Página inicial do Ninho em http://localhost",
+  "home_open": "Abrir página inicial"
 }

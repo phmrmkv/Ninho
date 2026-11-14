@@ -373,5 +373,15 @@
   "sites_count_one": "сайт",
   "sites_count_many": "сайтів",
   "create_db_go": "Створити базу даних",
-  "import_none_here": "У цій теці нічого імпортувати."
+  "import_none_here": "У цій теці нічого імпортувати.",
+  "home_sites": "Сайти",
+  "home_no_sites": "Сайтів поки немає. Створіть теку в теці www і оновіть сайти в Ninho.",
+  "home_servers": "Сервери",
+  "home_tools": "Інструменти",
+  "home_mail": "Поштова скринька Mailpit",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "У теці www є ваш власний файл index. Тут показано цю сторінку; ваш файл доступний за адресою",
+  "home_footer": "Цю сторінку створює Ninho і записує заново під час оновлення сайтів або запуску серверів.",
+  "home_page_pref": "Домашня сторінка Ninho за адресою http://localhost",
+  "home_open": "Відкрити домашню сторінку"
 }

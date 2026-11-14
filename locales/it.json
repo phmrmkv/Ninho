@@ -373,5 +373,15 @@
   "sites_count_one": "sito",
   "sites_count_many": "siti",
   "create_db_go": "Crea database",
-  "import_none_here": "Niente da importare in quella cartella."
+  "import_none_here": "Niente da importare in quella cartella.",
+  "home_sites": "Siti",
+  "home_no_sites": "Ancora nessun sito. Crea una cartella nella cartella www e aggiorna i siti in Ninho.",
+  "home_servers": "Server",
+  "home_tools": "Strumenti",
+  "home_mail": "Posta in arrivo di Mailpit",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "Hai un tuo file index nella cartella www. Qui viene mostrata questa pagina; il tuo file è su",
+  "home_footer": "Questa pagina è creata da Ninho e riscritta quando i siti si aggiornano o i server si avviano.",
+  "home_page_pref": "Pagina iniziale di Ninho su http://localhost",
+  "home_open": "Apri la pagina iniziale"
 }

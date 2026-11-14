@@ -438,6 +438,10 @@ pub fn apache_setup(s: &Settings, vdir: &Path) -> Result<(), String> {
             }
         }
     }
+    if s.home_page {
+        crate::home::write(s);
+        n.extend(crate::home::apache_lines(s));
+    }
     n.push(format!("IncludeOptional \"{}/etc/apache2/sites-enabled/*.conf\"", slash(Path::new(&s.root))));
     std::fs::write(vdir.join("conf").join("ninho.conf"), n.join(nl) + nl).map_err(|e| e.to_string())
 }

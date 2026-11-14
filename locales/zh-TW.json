@@ -373,5 +373,15 @@
   "sites_count_one": "個網站",
   "sites_count_many": "個網站",
   "create_db_go": "建立資料庫",
-  "import_none_here": "該資料夾中沒有可匯入的內容。"
+  "import_none_here": "該資料夾中沒有可匯入的內容。",
+  "home_sites": "網站",
+  "home_no_sites": "還沒有網站。請在 www 資料夾中建立一個資料夾，然後在 Ninho 中重新整理網站。",
+  "home_servers": "伺服器",
+  "home_tools": "工具",
+  "home_mail": "Mailpit 收件匣",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "www 資料夾中有你自己的 index 檔案。這裡顯示的是本頁面；你的檔案位於",
+  "home_footer": "本頁面由 Ninho 產生，並會在重新整理網站或啟動伺服器時重新寫入。",
+  "home_page_pref": "http://localhost 上的 Ninho 首頁",
+  "home_open": "開啟首頁"
 }

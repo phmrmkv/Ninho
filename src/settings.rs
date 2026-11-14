@@ -89,6 +89,9 @@ pub struct Settings {
     /// Look for a new Ninho on GitHub when it opens.
     #[serde(default = "yes")]
     pub check_updates: bool,
+    /// Ninho's own page at http://localhost (sites, servers, tools).
+    #[serde(default = "yes")]
+    pub home_page: bool,
 }
 
 fn yes() -> bool {
@@ -134,6 +137,7 @@ impl Default for Settings {
             close_to_tray: true,
             start_hidden: false,
             check_updates: true,
+            home_page: true,
         }
     }
 }

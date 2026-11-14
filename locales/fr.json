@@ -373,5 +373,15 @@
   "sites_count_one": "site",
   "sites_count_many": "sites",
   "create_db_go": "Créer une base de données",
-  "import_none_here": "Rien à importer dans ce dossier."
+  "import_none_here": "Rien à importer dans ce dossier.",
+  "home_sites": "Sites",
+  "home_no_sites": "Aucun site pour l’instant. Créez un dossier dans votre dossier www, puis actualisez les sites dans Ninho.",
+  "home_servers": "Serveurs",
+  "home_tools": "Outils",
+  "home_mail": "Boîte de réception Mailpit",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "Vous avez votre propre fichier index dans le dossier www. Cette page s’affiche ici ; votre fichier est à",
+  "home_footer": "Cette page est créée par Ninho et réécrite quand les sites sont actualisés ou que les serveurs démarrent.",
+  "home_page_pref": "Page d’accueil de Ninho sur http://localhost",
+  "home_open": "Ouvrir la page d’accueil"
 }
