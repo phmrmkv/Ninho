@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and ideas
-    url: https://github.com/paulohmaciel/Ninho/discussions
+    url: https://github.com/phmrmkv/Ninho/discussions
     about: Ask how to do something, share a setup or talk about an idea before opening an issue.
   - name: Report a security problem
-    url: https://github.com/paulohmaciel/Ninho/security/advisories/new
+    url: https://github.com/phmrmkv/Ninho/security/advisories/new
     about: Please report vulnerabilities privately here, not in a public issue.

@@ -14,7 +14,7 @@ build by itself.
 4. Users install it with:
 
    ```powershell
-   scoop bucket add ninho https://github.com/paulohmaciel/scoop-ninho
+   scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho
    scoop install ninho
    ```
 

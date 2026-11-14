@@ -48,7 +48,7 @@ offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders
-responsible for enforcement through the maintainer's profile at https://github.com/paulohmaciel, or by opening an
+responsible for enforcement through the maintainer's profile at https://github.com/phmrmkv, or by opening an
 issue that asks for private contact without giving details. All complaints will be reviewed and investigated promptly
 and fairly.
 

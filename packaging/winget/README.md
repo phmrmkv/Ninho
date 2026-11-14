@@ -41,8 +41,8 @@ for you (it needs a GitHub token the first time, `wingetcreate token --store`):
 
 ```powershell
 wingetcreate update PauloMaciel.Ninho --version 0.6.0 `
-  --urls https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/Ninho-x64.exe `
-         https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/Ninho-x86.exe `
+  --urls https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/Ninho-x64.exe `
+         https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/Ninho-x86.exe `
   --submit
 ```
 

@@ -3,12 +3,12 @@ PackageIdentifier: PauloMaciel.Ninho
 PackageVersion: 0.6.0
 PackageLocale: en-US
 Publisher: Paulo Maciel
-PublisherUrl: https://github.com/paulohmaciel
-PublisherSupportUrl: https://github.com/paulohmaciel/Ninho/issues
+PublisherUrl: https://github.com/phmrmkv
+PublisherSupportUrl: https://github.com/phmrmkv/Ninho/issues
 PackageName: Ninho
-PackageUrl: https://github.com/paulohmaciel/Ninho
+PackageUrl: https://github.com/phmrmkv/Ninho
 License: MIT OR GPL-3.0-only
-LicenseUrl: https://github.com/paulohmaciel/Ninho/blob/main/LICENSE
+LicenseUrl: https://github.com/phmrmkv/Ninho/blob/main/LICENSE
 ShortDescription: Free, portable local web server control panel for Windows.
 Description: |-
   Ninho is a free, open source and portable control panel for local web development on Windows, an alternative to
@@ -25,6 +25,6 @@ Tags:
   - mysql
   - apache
   - nodejs
-ReleaseNotesUrl: https://github.com/paulohmaciel/Ninho/releases/tag/v0.6.0
+ReleaseNotesUrl: https://github.com/phmrmkv/Ninho/releases/tag/v0.6.0
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

@@ -5,7 +5,7 @@
 Please **do not** open a public issue for a security problem.
 
 Report it privately with GitHub's private vulnerability reporting: open the
-[Security tab](https://github.com/paulohmaciel/Ninho/security) of the repository and choose
+[Security tab](https://github.com/phmrmkv/Ninho/security) of the repository and choose
 **Report a vulnerability**. If that button is missing, open a normal issue that only says you need to report a
 security problem, without any details, and the maintainer will arrange a private channel.
 

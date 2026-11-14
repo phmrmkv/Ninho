@@ -1,4 +1,4 @@
-//! Self-update from the GitHub releases of paulohmaciel/Ninho.
+//! Self-update from the GitHub releases of phmrmkv/Ninho.
 //! Flow: check() -> download_and_swap() -> restart(). A running exe can be renamed on Windows but not
 //! overwritten, so the new build is swapped in by renames and the old file is deleted on the next start.
 
@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-const API: &str = "https://api.github.com/repos/paulohmaciel/Ninho/releases/latest";
+const API: &str = "https://api.github.com/repos/phmrmkv/Ninho/releases/latest";
 const AGENT: &str = "Ninho-updater";
 
 #[derive(Clone, Debug, PartialEq)]
@@ -91,7 +91,7 @@ fn parse_release(v: &serde_json::Value, asset: &str) -> Result<Option<Release>, 
         notes: v["body"].as_str().unwrap_or("").trim().to_string(),
         exe_url,
         sums_url: url_of("SHA256SUMS.txt"),
-        page: v["html_url"].as_str().unwrap_or("https://github.com/paulohmaciel/Ninho/releases").to_string(),
+        page: v["html_url"].as_str().unwrap_or("https://github.com/phmrmkv/Ninho/releases").to_string(),
     }))
 }
 
@@ -347,17 +347,17 @@ mod tests {
     use super::*;
 
     const SAMPLE: &str = r###"{
-      "url": "https://api.github.com/repos/paulohmaciel/Ninho/releases/123456",
-      "html_url": "https://github.com/paulohmaciel/Ninho/releases/tag/v0.6.0",
+      "url": "https://api.github.com/repos/phmrmkv/Ninho/releases/123456",
+      "html_url": "https://github.com/phmrmkv/Ninho/releases/tag/v0.6.0",
       "tag_name": "v0.6.0",
       "name": "v0.6.0",
       "draft": false,
       "prerelease": false,
-      "body": "## What's Changed\n* Self-update by @paulohmaciel\n\n**Full Changelog**: https://github.com/paulohmaciel/Ninho/compare/v0.5.0...v0.6.0\n",
+      "body": "## What's Changed\n* Self-update by @phmrmkv\n\n**Full Changelog**: https://github.com/phmrmkv/Ninho/compare/v0.5.0...v0.6.0\n",
       "assets": [
-        {"name": "Ninho-x64.exe", "size": 9123456, "browser_download_url": "https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/Ninho-x64.exe"},
-        {"name": "Ninho-x86.exe", "size": 8123456, "browser_download_url": "https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/Ninho-x86.exe"},
-        {"name": "SHA256SUMS.txt", "size": 160, "browser_download_url": "https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/SHA256SUMS.txt"}
+        {"name": "Ninho-x64.exe", "size": 9123456, "browser_download_url": "https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/Ninho-x64.exe"},
+        {"name": "Ninho-x86.exe", "size": 8123456, "browser_download_url": "https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/Ninho-x86.exe"},
+        {"name": "SHA256SUMS.txt", "size": 160, "browser_download_url": "https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/SHA256SUMS.txt"}
       ]
     }"###;
 
@@ -401,7 +401,7 @@ mod tests {
         assert!(r.exe_url.ends_with("/v0.6.0/Ninho-x64.exe"));
         assert!(r.sums_url.unwrap().ends_with("SHA256SUMS.txt"));
         assert!(r.notes.starts_with("## What's Changed"));
-        assert_eq!(r.page, "https://github.com/paulohmaciel/Ninho/releases/tag/v0.6.0");
+        assert_eq!(r.page, "https://github.com/phmrmkv/Ninho/releases/tag/v0.6.0");
         let r86 = parse_release(&v, "Ninho-x86.exe").unwrap().unwrap();
         assert!(r86.exe_url.ends_with("Ninho-x86.exe"));
     }

@@ -86,7 +86,7 @@ pub fn install(version: &str) -> Result<PathBuf, String> {
         ("DisplayIcon", "REG_SZ", exe_s.clone()),
         ("InstallLocation", "REG_SZ", dir.to_string_lossy().into_owned()),
         ("UninstallString", "REG_SZ", format!("\"{exe_s}\" --uninstall-app")),
-        ("URLInfoAbout", "REG_SZ", "https://github.com/paulohmaciel/Ninho".into()),
+        ("URLInfoAbout", "REG_SZ", "https://github.com/phmrmkv/Ninho".into()),
         ("NoModify", "REG_DWORD", "1".into()),
         ("EstimatedSize", "REG_DWORD", size_kb),
     ];

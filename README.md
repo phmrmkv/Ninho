@@ -8,8 +8,8 @@
 Start Apache, MySQL, MariaDB, PostgreSQL, PHP, Node.js, Mailpit and Redis from one small control panel.
 Download the newest stable Apache, PHP, MySQL, Node.js, Mailpit and Redis with one click. No installer: just open `Ninho.exe`.
 
-[Download](https://github.com/paulohmaciel/Ninho/releases/latest) ·
-[Website](https://paulohmaciel.github.io/Ninho/) ·
+[Download](https://github.com/phmrmkv/Ninho/releases/latest) ·
+[Website](https://phmrmkv.github.io/Ninho/) ·
 [Features](#features) ·
 [Quick start](#quick-start) ·
 [Roadmap](ROADMAP.md) ·
@@ -78,7 +78,7 @@ source (MIT or GPL-3.0, your choice), portable** local development environment w
 
 ## Quick start
 
-1. Download **`Ninho-x64.exe`** (Windows 10/11 64-bit) or **`Ninho-x86.exe`** (32-bit Windows) from the [latest release](https://github.com/paulohmaciel/Ninho/releases/latest).
+1. Download **`Ninho-x64.exe`** (Windows 10/11 64-bit) or **`Ninho-x86.exe`** (32-bit Windows) from the [latest release](https://github.com/phmrmkv/Ninho/releases/latest).
 2. Put it in an empty folder (for example `C:\ninho`) or in an existing `C:\laragon` folder: Ninho uses the `bin`,
    `data` and `www` folders it finds beside it.
 3. Open it, click **Download and update** and download PHP, MySQL and anything else you need.
@@ -88,7 +88,7 @@ Prefer a package manager? These work after the first release is published:
 
 ```powershell
 winget install PauloMaciel.Ninho
-scoop bucket add ninho https://github.com/paulohmaciel/scoop-ninho
+scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho
 scoop install ninho
 ```
 
@@ -119,7 +119,7 @@ Apache and show me the last 50 lines of its log".
 ## Build from source
 
 ```bash
-git clone https://github.com/paulohmaciel/Ninho.git
+git clone https://github.com/phmrmkv/Ninho.git
 cd Ninho
 cargo build --release
 ```
@@ -185,7 +185,7 @@ Instalar por gerenciador de pacotes (funciona depois da primeira release):
 
 ```powershell
 winget install PauloMaciel.Ninho
-scoop bucket add ninho https://github.com/paulohmaciel/scoop-ninho
+scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho
 scoop install ninho
 ```
 

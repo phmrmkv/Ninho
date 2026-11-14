@@ -8,7 +8,7 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first; the short version i
 You need Windows and the stable [Rust toolchain](https://rustup.rs) (with the MSVC build tools).
 
 ```powershell
-git clone https://github.com/paulohmaciel/Ninho.git
+git clone https://github.com/phmrmkv/Ninho.git
 cd Ninho
 cargo build --release
 .\target\release\ninho.exe
@@ -41,13 +41,13 @@ CI runs the same command on every push and pull request, so please run it before
 3. Run `cargo test`. It checks that your file is valid JSON and has no key that `en.json` lacks (a missing key just shows in English).
 4. Open a pull request. To fix a wrong word in an existing language, just edit its JSON file.
 
-No time to do the whole file? Open a [translation issue](https://github.com/paulohmaciel/Ninho/issues/new/choose)
+No time to do the whole file? Open a [translation issue](https://github.com/phmrmkv/Ninho/issues/new/choose)
 and say which language; a missing text falls back to English, so partial work is still useful.
 
 ## Propose a feature
 
-Open a [feature request](https://github.com/paulohmaciel/Ninho/issues/new/choose) or start a thread in
-[Discussions](https://github.com/paulohmaciel/Ninho/discussions) and tell us the problem you want solved, not only
+Open a [feature request](https://github.com/phmrmkv/Ninho/issues/new/choose) or start a thread in
+[Discussions](https://github.com/phmrmkv/Ninho/discussions) and tell us the problem you want solved, not only
 the solution. Check [ROADMAP.md](ROADMAP.md) and [FEATURES.md](FEATURES.md) first, since it may already be planned.
 For bigger changes, please talk before you code so nobody spends a weekend on something that does not fit.
 

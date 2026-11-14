@@ -10,9 +10,9 @@
 - Packaging: winget and Scoop manifests (they work after the first release), CI builds and tests for 64-bit and 32-bit Windows.
 - Screen reader support (AccessKit): every button says what it does and on which server. Keyboard: a visible focus ring, Esc closes the window, Ctrl+1/2/3 switch tabs.
 - Fixes from a code review: updates install only with a matching SHA-256; the importer runs the old MySQL on a copy of its data; restarting after an update stops the servers and starts them again.
-- Website: https://paulohmaciel.github.io/Ninho/
+- Website: https://phmrmkv.github.io/Ninho/
 - Project files: CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue and pull request templates.
-- Website for GitHub Pages in `docs/index.html`: https://paulohmaciel.github.io/Ninho/
+- Website for GitHub Pages in `docs/index.html`: https://phmrmkv.github.io/Ninho/
 
 ## 0.5.0
 - 18 languages: English, Português (Brasil), Español, Français, Deutsch, Italiano, Nederlands, Polski, Русский, Українська, Türkçe, Bahasa Indonesia, Tiếng Việt, 日本語, 한국어, 简体中文, 繁體中文, हिन्दी. First start follows the Windows language; CJK and Devanagari use the fonts Windows already has.
