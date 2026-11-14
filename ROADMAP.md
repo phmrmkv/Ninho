@@ -30,9 +30,24 @@ these ideas; no code or assets come from these tools.
 - Screen reader support and full keyboard navigation.
 
 ### Linux and macOS
-The window (egui) already runs on Linux and macOS. What is Windows-only today is the server management, and each piece needs its own version per system:
-- installing tools: official tarballs where they exist (MySQL, MariaDB, PostgreSQL, Node.js, Mailpit), the package manager or Homebrew for the rest (PHP, Apache, Nginx);
-- processes and ports: `ss` / `lsof` instead of `netstat` / `tasklist`, signals instead of `taskkill`;
-- the hosts file at `/etc/hosts` with `sudo` or `pkexec`, certificates in the system store or the browser;
-- tray icon and start at login per system.
-Plan: put each of these behind a small per-system module, Windows first and unchanged, then Linux, then macOS.
+**Preview since the `feat-linux-macos` work:** everything that differs per system sits behind `src/platform`
+(`windows.rs` keeps the Windows behavior unchanged, `unix.rs` does the same jobs on Linux and macOS), and CI builds
+and tests on Ubuntu and macOS. Working there now:
+- servers from the package manager (Apache, PHP, MySQL, MariaDB, PostgreSQL, Redis, Memcached), linked into
+  `<root>/bin` and run as the user with Ninho's own config, data, sockets and logs; Mailpit, Node.js and cloudflared
+  from their official Linux / macOS builds; a hint with the `apt` / `dnf` / `brew` command for what is missing;
+- processes and ports with `ss` (Linux) and `lsof` (macOS), `kill` with a polite TERM first;
+- one Ninho at a time (a local socket), the desktop's language, folder and file dialogs (zenity / kdialog / Finder),
+  terminals, `xdg-open` / `open`;
+- tray icon (D-Bus StatusNotifier on Linux, menu bar on macOS), start at login (autostart / LaunchAgent);
+- Install on this PC on Linux (`~/.local/share/ninho` + menu entry), self-update with `Ninho-linux-x64` and
+  `Ninho-macos-arm64` / `Ninho-macos-x64`.
+
+Still to do:
+- Nginx with its own config (and PHP-FPM) on Linux and macOS;
+- HTTPS for the `.test` sites: the local authority in the system store (`update-ca-certificates`, the macOS keychain)
+  and Apache on 8443;
+- the hosts file through `pkexec` / an authorization prompt instead of showing the `sudo` command;
+- PHP extensions and Xdebug for the system PHP (its `conf.d` folder), MySQL under Ubuntu's AppArmor profile;
+- importing from XAMPP for Linux (`/opt/lampp`) and MAMP;
+- signed and notarized macOS build, `.deb` / `.rpm` / AppImage / Homebrew cask.

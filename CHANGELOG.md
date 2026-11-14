@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Linux and macOS preview: Ninho builds and runs there (`Ninho-linux-x64`, `Ninho-macos-arm64`, `Ninho-macos-x64`). Apache, PHP, MySQL, MariaDB, PostgreSQL, Redis and Memcached come from the package manager and run as the user with Ninho's own settings, data and ports (Apache on 8080); Mailpit and Node.js are downloaded. Windows is unchanged.
+
 ## 0.6.2 — 2026-11-13
 - A UX review of every screen: nothing cut off at the smallest window size, the same words for the same action, no exclamation marks, buttons all in the same three sizes.
 - Preferences: services and ports explained, with headers, readable ports, short version numbers and a Download button where nothing is installed; a theme choice; folder pickers.
