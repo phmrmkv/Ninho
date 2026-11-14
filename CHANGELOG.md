@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-11-14
+- Home page at http://localhost: every site with its address and kind, the running servers, Mailpit, Adminer and phpinfo (Preferences can turn it off). Your own index file in www stays reachable at /_www/.
+- The tray menu follows the language you pick.
+- Texts that were cut off in German, Russian, Ukrainian, French and others are shorter; Vietnamese letters draw correctly.
+- *Check the environment* speaks your language (it was always Portuguese).
 - Change the MySQL / MariaDB root password from the Config menu. Ninho can remember it, encrypted with Windows DPAPI for your user, and uses it to stop the server, in the database tools, the importer and the project database check.
 - `ninho.project.json`: a project file with PHP and Node.js version, servers, port and database. Sites show a project tag, use the file's PHP, start its servers with the site and offer to create its database; *More > Save project settings* writes the file.
 - MongoDB as a new server (port 27017, data in `data\mongodb`): *Download and update* reads MongoDB's own feed and installs the newest major release of the Community Server (no rapid releases). MongoDB Shell (mongosh) is a separate download; with it Ninho stops MongoDB politely, without it the program is ended (its journal keeps the data safe). *Admin* opens mongosh. More than one MongoDB can run (*New server*).

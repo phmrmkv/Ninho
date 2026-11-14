@@ -1,6 +1,6 @@
 [package]
 name = "ninho"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2024"
 description = "Free, portable local server for Windows: Apache, MySQL, PHP, Node.js and Mailpit from one control panel (XAMPP, WampServer and Laragon alternative)."
 license = "MIT OR GPL-3.0-only"
