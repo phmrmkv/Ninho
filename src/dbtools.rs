@@ -54,9 +54,7 @@ fn client(s: &Settings, id: &str, exe: &str, password: &str) -> Result<Command, 
     let mut c = Command::new(path);
     c.args(["-h", "127.0.0.1", "-u", "root"]);
     c.arg(format!("--port={}", s.svc(id).port));
-    if !password.is_empty() {
-        c.env("MYSQL_PWD", password);
-    }
+    crate::mysqlpw::set_env(&mut c, s, id, password);
     hide_window(&mut c);
     Ok(c)
 }

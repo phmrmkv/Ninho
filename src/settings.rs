@@ -25,6 +25,10 @@ pub struct ServiceCfg {
     /// Extra MySQL: its own data folder. Extra PHP server: the folder it serves. Empty for the first of each kind.
     #[serde(default)]
     pub data_dir: String,
+    /// MySQL / MariaDB: the root password, protected with Windows DPAPI (this user only), in base64.
+    /// Empty = not remembered. Never written in plain text.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub root_pw_dpapi: String,
 }
 
 impl ServiceCfg {
@@ -38,6 +42,7 @@ impl ServiceCfg {
             port: d.default_port,
             version: String::new(),
             data_dir: String::new(),
+            root_pw_dpapi: String::new(),
         }
     }
     pub fn is_extra(&self) -> bool {

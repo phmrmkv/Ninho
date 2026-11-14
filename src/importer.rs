@@ -413,9 +413,7 @@ pub fn load_dump(s: &Settings, dump: &Path, password: &str) -> Result<(), String
     let mut c = Command::new(exe);
     c.arg("--no-defaults").args(["-h", "127.0.0.1", "-u", "root", "--protocol=tcp", "--default-character-set=utf8mb4"]);
     c.arg(format!("--port={port}"));
-    if !password.is_empty() {
-        c.env("MYSQL_PWD", password);
-    }
+    crate::mysqlpw::set_env(&mut c, s, "mysql", password);
     hide_window(&mut c);
     // The file feeds stdin, so a big dump never sits in memory.
     let out = c.stdin(Stdio::from(input)).output().map_err(|e| e.to_string())?;

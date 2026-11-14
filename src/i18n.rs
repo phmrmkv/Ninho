@@ -205,6 +205,28 @@ mod tests {
         }
     }
 
+    /// The password and project texts exist in all 18 languages, with the same {placeholders} as English.
+    #[test]
+    fn password_and_project_texts_are_translated() {
+        let all: Vec<(&str, HashMap<String, String>)> = LOCALES.iter().map(|(c, _, j, _)| (*c, serde_json::from_str(j).unwrap())).collect();
+        let en = &all[0].1;
+        fn holes(t: &str) -> Vec<&str> {
+            let mut v: Vec<&str> = t.split('{').skip(1).filter_map(|p| p.split('}').next()).collect();
+            v.sort();
+            v
+        }
+        for k in en.keys().filter(|k| k.starts_with("pw_") || k.starts_with("proj_")) {
+            for (code, m) in &all[1..] {
+                let t = m.get(k).unwrap_or_else(|| panic!("{code} lacks {k}"));
+                assert!(!t.is_empty(), "{code} {k} is empty");
+                assert_eq!(holes(t), holes(&en[k]), "{code} {k}: placeholders differ");
+                if !matches!(k.as_str(), "proj_tag" | "pw_menu") {
+                    assert_ne!(t, &en[k], "{code} {k} is not translated");
+                }
+            }
+        }
+    }
+
     #[test]
     fn codes_fall_back() {
         assert_eq!(Lang::from_code("pt-PT").code(), "pt-BR");
