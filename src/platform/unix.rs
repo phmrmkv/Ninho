@@ -128,19 +128,6 @@ fn run(cmd: &str, args: &[&str]) -> String {
     Command::new(cmd).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
 }
 
-/// PID → program name (only the processes this user may see).
-pub fn programs() -> HashMap<u32, String> {
-    run("ps", &["-A", "-o", "pid=", "-o", "comm="])
-        .lines()
-        .filter_map(|l| {
-            let (pid, name) = l.trim().split_once(char::is_whitespace)?;
-            let name = name.trim();
-            // macOS gives the full path of the program; the name is enough.
-            Some((pid.parse().ok()?, name.rsplit('/').next().unwrap_or(name).to_string()))
-        })
-        .collect()
-}
-
 fn add(by: &mut HashMap<(u16, u32), Listener>, addr: &str, port: u16, pid: u32, program: &str) {
     let e = by.entry((port, pid)).or_insert_with(|| Listener { port, addrs: Vec::new(), pid, program: program.to_string() });
     let addr = addr.trim_start_matches('[').trim_end_matches(']');
@@ -484,11 +471,6 @@ pub fn listen(flag: std::sync::Arc<std::sync::atomic::AtomicBool>, ctx: eframe::
             }
         }
     });
-}
-
-/// Called when Ninho closes: the socket file goes too.
-pub fn release_single() {
-    let _ = std::fs::remove_file(socket_path());
 }
 
 #[cfg(test)]

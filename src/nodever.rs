@@ -303,9 +303,15 @@ mod tests {
       {"version":"v18.20.7","date":"2026-02-01","files":["win-x64-zip"],"lts":"Hydrogen"}
     ]"#;
 
+    /// The fixtures are written with the Windows names; on Linux and macOS this system's build takes their place
+    /// (and the "other system" build stays another one).
+    fn here(index: &str) -> String {
+        index.replace("linux-x64", "other-x64").replace("win-x64-zip", &index_key())
+    }
+
     #[test]
     fn index_gives_newest_per_line_and_current() {
-        let a = parse_index(INDEX.as_bytes()).unwrap();
+        let a = parse_index(here(INDEX).as_bytes()).unwrap();
         assert_eq!(
             a,
             vec![
@@ -320,7 +326,7 @@ mod tests {
 
     #[test]
     fn index_skips_releases_without_a_windows_zip_and_marks_lts_that_is_newest() {
-        let a = parse_index(br#"[{"version":"v26.0.0","files":["win-x64-zip"],"lts":"Next"},{"version":"v25.9.0","files":["linux-x64"],"lts":false}]"#).unwrap();
+        let a = parse_index(here(r#"[{"version":"v26.0.0","files":["win-x64-zip"],"lts":"Next"},{"version":"v25.9.0","files":["linux-x64"],"lts":false}]"#).as_bytes()).unwrap();
         assert_eq!(a, vec![("26.0.0".to_string(), "Next".to_string(), true)]);
         assert!(parse_index(b"[]").is_err());
         assert!(parse_index(b"nope").is_err());
@@ -371,8 +377,8 @@ mod tests {
 
     #[test]
     fn folder_names_and_project_file() {
-        assert_eq!(folder_version("node-v26.13.1-win-x64"), Some("26.13.1"));
-        assert_eq!(folder_version("node-v26.13.1-win-x64.zip"), None);
+        assert_eq!(folder_version(&format!("node-v26.13.1-{ARCH}")), Some("26.13.1"));
+        assert_eq!(folder_version(&format!("node-v26.13.1-{ARCH}.zip")), None);
         assert_eq!(folder_version("npm"), None);
         let d = std::env::temp_dir().join(format!("nodever-test-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();

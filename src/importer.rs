@@ -654,6 +654,7 @@ mod tests {
         fs::write(p, b"x").unwrap();
     }
 
+    #[cfg(windows)]
     fn fake_bin(bin: &Path) {
         for n in ["mysqld.exe", "mysqldump.exe", "mysql.exe", "mysqladmin.exe"] {
             touch(&bin.join(n));
