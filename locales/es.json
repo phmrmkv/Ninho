@@ -43,7 +43,7 @@
   "create": "Crear",
   "project_name": "Nombre del proyecto",
   "project_type": "Tipo",
-  "db_name": "Nombre de la base de datos",
+  "db_name": "Nombre de la base",
   "db_password": "Contraseña de root",
   "auto_db": "Crear base de datos automáticamente",
   "blank": "En blanco",

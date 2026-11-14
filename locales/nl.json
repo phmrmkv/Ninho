@@ -198,7 +198,7 @@
   "qr": "QR-code",
   "qr_hint": "Richt de camera van je telefoon erop om de link te openen.",
   "node_version": "Node.js-versie:",
-  "node_more": "Een andere Node.js-versie installeren",
+  "node_more": "Andere Node.js-versie",
   "node_hint": "Versies staan naast elkaar. Een project gebruikt die in zijn .nvmrc-bestand (in zijn terminal).",
   "health": "Mijn omgeving controleren",
   "check_again": "Opnieuw controleren",

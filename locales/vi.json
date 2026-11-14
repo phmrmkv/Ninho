@@ -169,7 +169,7 @@
   "restore_warn": "Các bảng trong bản sao lưu sẽ thay thế các bảng cùng tên trong cơ sở dữ liệu đó.",
   "import_into": "Nhập tệp .sql vào",
   "import_sql": "Chọn .sql...",
-  "share": "Chia sẻ liên kết",
+  "share": "Chia sẻ",
   "unshare": "Ngừng chia sẻ",
   "share_hint": "Một liên kết https công khai tới trang web này (Cloudflare quick tunnel, không cần tài khoản). Bất kỳ ai có liên kết đều có thể mở.",
   "public_link": "Liên kết công khai:",
