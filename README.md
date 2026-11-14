@@ -194,6 +194,26 @@ Vindo do XAMPP ou do WampServer? Na primeira vez, ou depois pelo menu, o Ninho o
 Vindo do Laragon? Coloque o `Ninho.exe` em `C:\laragon`: as pastas `bin`, `data\mysql-8.4` e `www` são usadas como
 estão.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [phmrmkv](https://github.com/phmrmkv)
+- Approvers: [phmrmkv](https://github.com/phmrmkv)
+
+Every release is built from this repository by [GitHub Actions](.github/workflows/release.yml), and every signing request is approved by hand.
+
+## Privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+What Ninho reaches on the internet, and only for what you use:
+- **Updates of Ninho:** when it opens, it asks GitHub for the latest release of Ninho (switch it off in Preferences).
+- **Downloads:** *Download and update* reads the official sites of each program (windows.php.net, dev.mysql.com, nodejs.org, Apache Lounge, mariadb.org, postgresql.org, xdebug.org, adminer.org, GitHub) to list and download versions.
+- **Share a site:** *Share link* starts a Cloudflare quick tunnel ([Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/)); your site is reachable through that link until you stop sharing.
+
+Ninho sends no usage data, no crash reports and no identifiers. A crash is written only to `tmp\ninho-crash.log` on your PC.
+
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [GPL-3.0](LICENSE-GPL-3.0), at your option. © phmrmkv. Ninho is not affiliated with Apache, Oracle (MySQL), the PHP Group, the OpenJS

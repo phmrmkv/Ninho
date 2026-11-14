@@ -39,9 +39,36 @@ jobs:
         shell: pwsh
         run: Copy-Item target/${{ matrix.target }}/release/ninho.exe ${{ matrix.name }}
       - uses: actions/upload-artifact@v4
+        id: upload
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
+      # Code signing by SignPath (free for open source, certificate by SignPath Foundation). It runs once the
+      # repository has the SIGNPATH_ORGANIZATION_ID variable and the SIGNPATH_API_TOKEN secret; until then the
+      # release keeps the unsigned exe. Every signing request needs a manual approval in SignPath.
+      - name: Sign with SignPath
+        id: sign
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ninho
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: exe
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - name: Use the signed exe
+        if: ${{ steps.sign.outcome == 'success' }}
+        shell: pwsh
+        run: Copy-Item signed/${{ matrix.name }} ${{ matrix.name }} -Force
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.sign.outcome == 'success' }}
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+          overwrite: true
 
   release:
     needs: build
@@ -59,3 +86,6 @@ jobs:
             Ninho-x86.exe
             SHA256SUMS.txt
           generate_release_notes: true
+          body: |
+            Download `Ninho-x64.exe` (64-bit Windows) or `Ninho-x86.exe` (32-bit) and check it against `SHA256SUMS.txt`.
+            [Code signing policy](https://github.com/phmrmkv/Ninho#code-signing-policy) · [Privacy](https://github.com/phmrmkv/Ninho#privacy)
