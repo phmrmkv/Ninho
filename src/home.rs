@@ -193,6 +193,10 @@ pub fn apache_block(home: &str, www: &str, port: u16, folders: &[String]) -> Vec
         "        Require all granted".to_string(),
         "    </Directory>".to_string(),
         format!("    Alias /_www \"{www}\""),
+        format!("    <Directory \"{www}\">"),
+        "        Require all granted".to_string(),
+        "        DirectoryIndex index.php index.html index.htm".to_string(),
+        "    </Directory>".to_string(),
     ];
     for f in folders {
         n.push(format!("    Alias /{f} \"{www}/{f}\""));
