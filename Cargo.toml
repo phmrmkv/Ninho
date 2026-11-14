@@ -1,0 +1,18 @@
+[package]
+name = "ninho"
+version = "0.6.0"
+edition = "2024"
+description = "Free, portable local server for Windows: Apache, MySQL, PHP, Node.js and Mailpit from one control panel (XAMPP, WampServer and Laragon alternative)."
+license = "MIT OR GPL-3.0-only"
+repository = "https://github.com/paulohmaciel/Ninho"
+keywords = ["local-server", "xampp", "wamp", "laragon", "php"]
+
+[dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["accesskit", "default_fonts", "glow"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tray-icon = { version = "0.26.1", default-features = false }
+
+[profile.release]
+opt-level = 2

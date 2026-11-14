@@ -1,0 +1,71 @@
+# When a release is published, print the SHA-256 hashes ready to paste into the winget and Scoop manifests
+# (packaging/winget, packaging/scoop). It publishes nothing anywhere: the values only appear in the job summary.
+# It uses no third-party actions, only the GitHub CLI that comes on the runner, so there is nothing to pin or update.
+name: Packaging hashes
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  hashes:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download SHA256SUMS.txt from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS.txt
+      - name: Print the hashes
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          x64=$(awk '$2 ~ /Ninho-x64\.exe$/ {print $1}' SHA256SUMS.txt)
+          x86=$(awk '$2 ~ /Ninho-x86\.exe$/ {print $1}' SHA256SUMS.txt)
+          if [ -z "$x64" ] || [ -z "$x86" ]; then
+            echo "SHA256SUMS.txt is missing a hash for Ninho-x64.exe or Ninho-x86.exe" >&2
+            cat SHA256SUMS.txt >&2
+            exit 1
+          fi
+          {
+            echo "## Packaging hashes for Ninho ${version}"
+            echo
+            echo "Paste these into the manifests. Nothing was published."
+            echo
+            echo "| File | SHA-256 |"
+            echo "|---|---|"
+            echo "| Ninho-x64.exe | \`${x64}\` |"
+            echo "| Ninho-x86.exe | \`${x86}\` |"
+            echo
+            echo "### winget (packaging/winget/PauloMaciel.Ninho.installer.yaml)"
+            echo
+            echo '```yaml'
+            echo "PackageVersion: ${version}"
+            echo "Installers:"
+            echo "  - Architecture: x64"
+            echo "    InstallerSha256: ${x64^^}"
+            echo "  - Architecture: x86"
+            echo "    InstallerSha256: ${x86^^}"
+            echo '```'
+            echo
+            echo "### Scoop (packaging/scoop/ninho.json)"
+            echo
+            echo '```json'
+            echo "\"version\": \"${version}\","
+            echo "\"architecture\": {"
+            echo "    \"64bit\": { \"hash\": \"${x64}\" },"
+            echo "    \"32bit\": { \"hash\": \"${x86}\" }"
+            echo "}"
+            echo '```'
+            echo
+            echo "### Original SHA256SUMS.txt"
+            echo
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

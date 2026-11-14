@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ninho — free, portable local server for Windows</title>
+<meta name="description" content="Ninho is a free, open source and portable local development server for Windows. Start Apache, MySQL, MariaDB, PostgreSQL, PHP, Node.js, Mailpit and Redis from one small control panel, and download the newest stable versions in one click.">
+<meta name="keywords" content="local server windows, portable web server, php mysql windows, apache php mysql, local development environment, xampp alternative, wampserver alternative, mailpit, open source">
+<link rel="canonical" href="https://paulohmaciel.github.io/Ninho/">
+<link rel="icon" type="image/png" href="ninho-256.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Ninho — free, portable local server for Windows">
+<meta property="og:description" content="Apache, MySQL, PHP, Node.js, Mailpit and more from one small control panel. One file, no installer, open source.">
+<meta property="og:image" content="https://paulohmaciel.github.io/Ninho/painel.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ninho","operatingSystem":"Windows 10, Windows 11","applicationCategory":"DeveloperApplication","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"downloadUrl":"https://github.com/paulohmaciel/Ninho/releases/latest","softwareVersion":"0.5.0"}
+</script>
+<style>
+:root {
+  --bg: #eef2f5; --surface: #ffffff; --surface2: #f3f6f8; --fg: #1c2a33; --muted: #4f5f69; --line: #d9e1e6;
+  --brand: #1b7880; --on-brand: #ffffff; --accent: #2fb3bd; --ok: #0c7a63; --console: #1f2a30;
+  --radius: 8px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12181c; --surface: #1a2227; --surface2: #232d33; --fg: #e6eef1; --muted: #9fb0b8; --line: #34424a;
+    --brand: #3cc7d1; --on-brand: #062226; --accent: #3cc7d1; --ok: #5fdcbf; --console: #0b1013;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12181c; --surface: #1a2227; --surface2: #232d33; --fg: #e6eef1; --muted: #9fb0b8; --line: #34424a;
+  --brand: #3cc7d1; --on-brand: #062226; --accent: #3cc7d1; --ok: #5fdcbf; --console: #0b1013;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--brand); }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+header.top { border-bottom: 1px solid var(--line); background: var(--surface); }
+.bar { display: flex; align-items: center; gap: 12px; min-height: 60px; }
+.bar img { width: 36px; height: 36px; }
+.bar .name { font-weight: 600; font-size: 19px; }
+.bar nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+.bar nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: var(--radius); font-size: 15px; }
+.bar nav a:hover { background: var(--surface2); color: var(--fg); }
+.theme { height: 32px; padding: 0 10px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer; }
+.hero { padding: 56px 0 32px; display: grid; gap: 32px; }
+.hero h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.15; margin: 0 0 14px; letter-spacing: -0.5px; }
+.hero p.lead { font-size: 19px; color: var(--muted); margin: 0 0 24px; max-width: 680px; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.btn { display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: var(--radius); font-weight: 600; text-decoration: none; font-size: 16px; }
+.btn.primary { background: var(--brand); color: var(--on-brand); }
+.btn.neutral { border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.small { font-size: 13px; color: var(--muted); }
+.shot { border-radius: 12px; border: 1px solid var(--line); overflow: hidden; background: var(--surface); box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+.shot img { display: block; width: 100%; height: auto; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+.tabs button { height: 36px; padding: 0 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+section { padding: 40px 0; }
+section h2 { font-size: 28px; margin: 0 0 8px; }
+section > .wrap > p.sub { color: var(--muted); margin: 0 0 24px; max-width: 700px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.card h3 { margin: 0 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+.modules { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.modules span { background: var(--surface2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+pre { background: var(--console); color: #e6eef1; padding: 16px; border-radius: 10px; overflow-x: auto; font-size: 14px; line-height: 1.5; margin: 0; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.steps li { counter-increment: s; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 14px 56px; position: relative; }
+.steps li::before { content: counter(s); position: absolute; left: 16px; top: 14px; width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: var(--on-brand); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+details p { color: var(--muted); margin: 8px 0 0; }
+footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+@media (max-width: 640px) {
+  .bar nav { display: none; }
+  .theme { margin-left: auto; }
+  .hero { padding-top: 32px; }
+}
+</style>
+<script>
+  // Theme picked on this page (Light / Dark / System), applied before the page draws.
+  try { var t = localStorage.getItem("ninho-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <img src="ninho-256.png" alt="">
+    <span class="name">Ninho</span>
+    <nav aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#start">Quick start</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/paulohmaciel/Ninho">GitHub</a>
+    </nav>
+    <button class="theme" id="theme" type="button" aria-label="Change theme">System</button>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <div>
+    <h1>Your local server for Windows, in one small file</h1>
+    <p class="lead">Ninho starts Apache, MySQL, MariaDB, PostgreSQL, PHP, Node.js, Mailpit and Redis from one control panel, and downloads the newest stable version of each from the official sites. Free and open source.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/paulohmaciel/Ninho/releases/latest">Download for Windows</a>
+      <a class="btn neutral" href="https://github.com/paulohmaciel/Ninho">Source code</a>
+      <span class="small">Windows 10 and 11, 64 and 32 bit · MIT or GPL-3.0</span>
+    </div>
+  </div>
+  <div>
+    <div class="tabs" role="tablist" aria-label="Screenshots">
+      <button role="tab" aria-selected="true" data-img="painel.png" data-alt="Modules: Apache and MySQL running, PHP server and Mailpit ready">Modules</button>
+      <button role="tab" aria-selected="false" data-img="sites.png" data-alt="Sites: each project with its .test address, PHP version and share link">Sites</button>
+      <button role="tab" aria-selected="false" data-img="portas.png" data-alt="Ports: every listening port with program, PID and reach">Ports</button>
+      <button role="tab" aria-selected="false" data-img="baixar-e-atualizar.png" data-alt="Download and update: newest stable versions from the official sites">Download and update</button>
+      <button role="tab" aria-selected="false" data-img="verificar.png" data-alt="Check the environment: Visual C++, ports, hosts file, HTTPS and disk">Check the environment</button>
+      <button role="tab" aria-selected="false" data-img="painel-claro.png" data-alt="Modules in the light theme">Light theme</button>
+    </div>
+    <div class="shot"><img id="shot" src="painel.png" width="1250" height="825" alt="Modules: Apache and MySQL running, PHP server and Mailpit ready"></div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="sub">Everything a PHP, WordPress, Laravel or Node.js project needs on your PC, without an installer and without a single setting to edit by hand.</p>
+    <div class="grid">
+      <div class="card"><h3>One file, no installer</h3><p>Open Ninho.exe from any folder or a USB stick. Its settings stay in ninho.json beside it. Prefer the Start menu? One click installs it, no administrator needed.</p></div>
+      <div class="card"><h3>Newest stable versions</h3><p>Download and update reads windows.php.net, MySQL, MariaDB, PostgreSQL, nodejs.org and GitHub, and installs side by side with what you already have.</p></div>
+      <div class="card"><h3>Every site gets an address</h3><p>Each folder in www opens at http://name.test, with HTTPS from a local certificate authority when you want it.</p></div>
+      <div class="card"><h3>See every port</h3><p>Who holds port 80 or 3306, which ports Windows keeps for itself, and a safe Stop button for the rest.</p></div>
+      <div class="card"><h3>More than one of each</h3><p>Two MySQL servers with their own data, several PHP servers, another Redis, each on its own port.</p></div>
+      <div class="card"><h3>Share a site</h3><p>A public https link to any local site in one click, with a QR code for your phone.</p></div>
+      <div class="card"><h3>Databases</h3><p>Back up, restore and import .sql files, and open Adminer or HeidiSQL from the MySQL row.</p></div>
+      <div class="card"><h3>Come from XAMPP, WampServer or Laragon</h3><p>Ninho finds them and copies your sites and databases. The old install is only read, never changed.</p></div>
+      <div class="card"><h3>Updates itself</h3><p>A new Ninho shows up in the header. It downloads, checks the SHA-256 and restarts on the new version.</p></div>
+      <div class="card"><h3>Made for AI agents too</h3><p>Ninho.exe mcp is a Model Context Protocol server, so coding agents can start servers and read status.</p></div>
+      <div class="card"><h3>18 languages</h3><p>English, Português, Español, Français, Deutsch, Italiano, Nederlands, Polski, Русский, Українська, Türkçe, Bahasa Indonesia, Tiếng Việt, 日本語, 한국어, 简体中文, 繁體中文, हिन्दी.</p></div>
+      <div class="card"><h3>Light and dark</h3><p>Follows Windows or stays the way you pick. Closing the window keeps Ninho next to the clock.</p></div>
+    </div>
+    <div class="modules" aria-label="Modules">
+      <span>Apache</span><span>Nginx</span><span>PHP</span><span>MySQL 8.4 LTS</span><span>MariaDB LTS</span><span>PostgreSQL</span><span>Node.js LTS</span><span>Redis</span><span>Memcached</span><span>Mailpit</span><span>Xdebug</span><span>Composer</span>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Quick start</h2>
+    <p class="sub">About two minutes from download to your first page.</p>
+    <ol class="steps">
+      <li>Download <strong>Ninho.exe</strong> from the <a href="https://github.com/paulohmaciel/Ninho/releases/latest">latest release</a> and put it in a folder such as <code>C:\Ninho</code>.</li>
+      <li>Open it. The welcome window asks for your language and what to download now (Apache, PHP and MySQL come checked).</li>
+      <li>Click <strong>Start all</strong>, put a project folder in <code>www</code> and open <code>http://your-folder.test</code>.</li>
+    </ol>
+    <p class="sub" style="margin-top:24px">Prefer the terminal?</p>
+<pre>winget install PauloMaciel.Ninho
+scoop install ninho
+Ninho.exe status --json
+Ninho.exe start mysql</pre>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Questions</h2>
+    <details><summary>Is it really free?</summary><p>Yes. Ninho is open source under MIT or GPL-3.0, your choice, with no paid version and no account.</p></details>
+    <details><summary>Windows says it protected my PC. Is it safe?</summary><p>That warning shows for new programs that are not signed yet. Every release publishes the SHA-256 of each file, and the code is on GitHub for anyone to read and build.</p></details>
+    <details><summary>Can I keep my XAMPP, WampServer or Laragon?</summary><p>Yes. Ninho only reads them when you import, and it uses free ports when theirs are busy.</p></details>
+    <details><summary>Does it need administrator rights?</summary><p>No. Windows asks only when Ninho writes the .test addresses to the hosts file.</p></details>
+    <details><summary>Linux and macOS?</summary><p>Windows comes first. The plan for Linux and macOS is in the <a href="https://github.com/paulohmaciel/Ninho/blob/main/ROADMAP.md">roadmap</a>.</p></details>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Ninho is made by the community, for the community. <a href="https://github.com/paulohmaciel/Ninho">GitHub</a> · <a href="https://github.com/paulohmaciel/Ninho/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/paulohmaciel/Ninho/blob/main/CONTRIBUTING.md">Contribute</a> · MIT or GPL-3.0
+  </div>
+</footer>
+
+<script>
+  // Screenshot tabs.
+  var shot = document.getElementById("shot");
+  document.querySelectorAll('[role="tab"]').forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll('[role="tab"]').forEach(function (o) { o.setAttribute("aria-selected", o === b ? "true" : "false"); });
+      shot.src = b.dataset.img; shot.alt = b.dataset.alt;
+    });
+  });
+  // Theme button: System -> Light -> Dark.
+  var btn = document.getElementById("theme"), order = ["system", "light", "dark"], names = { system: "System", light: "Light", dark: "Dark" };
+  function current() { return document.documentElement.dataset.theme || "system"; }
+  btn.textContent = names[current()];
+  btn.addEventListener("click", function () {
+    var next = order[(order.indexOf(current()) + 1) % 3];
+    if (next === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = next;
+    try { if (next === "system") localStorage.removeItem("ninho-theme"); else localStorage.setItem("ninho-theme", next); } catch (e) {}
+    btn.textContent = names[next];
+  });
+</script>
+</body>
+</html>

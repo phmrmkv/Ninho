@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an idea or an improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please look at ROADMAP.md, FEATURES.md and the open issues first; your idea may be there already.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem do you want to solve?
+      description: Tell us what you are trying to do and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like Ninho to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: How do you do it today, or how do XAMPP, WampServer or Laragon handle it?
+  - type: input
+    id: version
+    attributes:
+      label: Ninho version
+      placeholder: "0.5.0"
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I would like to try a pull request for this.

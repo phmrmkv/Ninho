@@ -1,0 +1,10 @@
+# Build output
+/target
+
+# Local settings of a portable copy
+/ninho.json
+
+# Local notes and captures from the first prototype (not part of Ninho)
+/MECHANICS.md
+/mechanics.json
+/shots

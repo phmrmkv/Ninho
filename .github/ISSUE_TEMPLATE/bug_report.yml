@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Ninho does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The more you tell us, the faster we can fix it.
+        For a security problem, please do not use this form: see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Ninho version
+      description: Shown in the window or the About box, for example 0.5.0.
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Which build do you run?
+      options:
+        - x64 (Ninho-x64.exe)
+        - x86 (Ninho-x86.exe)
+        - I do not know
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Ninho
+        2. Click ...
+        3. See the error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        If Ninho crashed, paste the contents of `tmp\ninho-crash.log` (the `tmp` folder inside your Ninho folder, for example `C:\ninho\tmp`).
+        For a server that will not start, paste its log from the Logs button. Remove anything private.
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, which servers and versions you use, antivirus, a corporate PC...

@@ -1,0 +1,42 @@
+{
+    "version": "0.6.0",
+    "description": "Free, portable local web server control panel for Windows (Apache, MySQL, PHP, Node.js, Mailpit, Redis).",
+    "homepage": "https://github.com/paulohmaciel/Ninho",
+    "license": "MIT OR GPL-3.0-only",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/Ninho-x64.exe#/ninho.exe",
+            "hash": "REPLACE_WITH_SHA256"
+        },
+        "32bit": {
+            "url": "https://github.com/paulohmaciel/Ninho/releases/download/v0.6.0/Ninho-x86.exe#/ninho.exe",
+            "hash": "REPLACE_WITH_SHA256"
+        }
+    },
+    "bin": "ninho.exe",
+    "shortcuts": [
+        [
+            "ninho.exe",
+            "Ninho"
+        ]
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/paulohmaciel/Ninho/releases/download/v$version/Ninho-x64.exe#/ninho.exe",
+                "hash": {
+                    "url": "https://github.com/paulohmaciel/Ninho/releases/download/v$version/SHA256SUMS.txt",
+                    "regex": "([a-fA-F0-9]{64})\\s+Ninho-x64\\.exe"
+                }
+            },
+            "32bit": {
+                "url": "https://github.com/paulohmaciel/Ninho/releases/download/v$version/Ninho-x86.exe#/ninho.exe",
+                "hash": {
+                    "url": "https://github.com/paulohmaciel/Ninho/releases/download/v$version/SHA256SUMS.txt",
+                    "regex": "([a-fA-F0-9]{64})\\s+Ninho-x86\\.exe"
+                }
+            }
+        }
+    }
+}

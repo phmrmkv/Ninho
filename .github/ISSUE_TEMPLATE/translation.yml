@@ -1,0 +1,47 @@
+name: Translation
+description: Add a new language or fix a text in an existing one.
+labels: ["translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The texts live in `locales/<code>.json`. The steps are in CONTRIBUTING.md. A missing text falls back to
+        English, so a partial translation is still welcome.
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      description: Name and code, for example Svenska (sv), or the existing language you want to fix.
+      placeholder: "Svenska (sv)"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is this about?
+      options:
+        - A new language
+        - Fixing wrong or unclear texts in an existing language
+        - Texts that look cut off or do not fit
+    validations:
+      required: true
+  - type: textarea
+    id: keys
+    attributes:
+      label: Keys and suggested texts
+      description: The keys from `locales/en.json` and the text you propose. Leave empty for a whole new language.
+      placeholder: |
+        "key.name": "Suggested text"
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Ninho version
+      placeholder: "0.5.0"
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Pull request
+      options:
+        - label: I will open a pull request with the translation.
+        - label: Please help me, I do not know how to open one.
