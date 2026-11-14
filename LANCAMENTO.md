@@ -6,8 +6,8 @@ O que falta para o Ninho estar impecável no Windows antes de publicar. ✅ feit
 ## Confiança e instalação
 - ✅ Atualização automática: o Ninho vê a release nova no GitHub, baixa o `.exe` certo (x64 ou x86), confere o SHA-256 e se troca sozinho (testes automáticos; o teste de verdade só depois da primeira release)
 - 🔑 Assinatura digital do `.exe` (sem ela o Windows mostra "O Windows protegeu o computador"): SignPath (grátis para código aberto) ou Azure Trusted Signing; o passo no GitHub Actions fica pronto, falta a conta
-- 🟡 Pacote no winget (`winget install Ninho`): manifestos prontos em `packaging/winget`; 🔑 enviar ao winget-pkgs depois da primeira release
-- 🟡 Pacote no Scoop (`scoop install ninho`): manifesto pronto em `packaging/scoop`; 🔑 criar o repositório do bucket
+- 🟡 Pacote no winget: manifestos da 0.6.2 com SHA-256 enviados ao winget-pkgs; esperando a revisão da Microsoft
+- ✅ Pacote no Scoop: bucket em https://github.com/phmrmkv/scoop-ninho (`scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho`)
 - ✅ Portátil e instalável (Menu Iniciar, Aplicativos instalados, sem administrador)
 - ✅ Build x64 e x86 no GitHub Actions, com SHA-256 de cada arquivo
 
@@ -29,11 +29,11 @@ O que falta para o Ninho estar impecável no Windows antes de publicar. ✅ feit
 
 ## Projeto no GitHub
 - ✅ CONTRIBUTING.md (como compilar, traduzir, enviar mudanças)
-- ✅ SECURITY.md (como avisar uma falha de segurança); 🔑 ligar o aviso privado de falhas no GitHub
+- ✅ SECURITY.md (como avisar uma falha de segurança)
 - ✅ CODE_OF_CONDUCT.md
 - ✅ Modelos de issue (erro, ideia, tradução) e de pull request
 - ✅ README pensado para busca, FEATURES.md, ROADMAP.md, CHANGELOG.md, licença MIT ou GPL-3.0
-- ✅ Página de apresentação em `docs/index.html` (capturas em inglês de uma pasta de exemplo, temas claro e escuro, celular); 🔑 ligar o GitHub Pages na pasta `docs` depois de enviar. O GIF ficou de fora (sem ffmpeg nesta máquina): as capturas trocam por abas
-- 🔑 Primeira release no GitHub (enviar o código e criar a tag)
-- 🔑 Ligar Discussions e criar as etiquetas (bug, ideia, tradução) no GitHub
+- ✅ Página de apresentação em `docs/index.html` (capturas em inglês de uma pasta de exemplo, temas claro e escuro, celular); no ar em https://phmrmkv.github.io/Ninho/. O GIF ficou de fora (sem ffmpeg nesta máquina): as capturas trocam por abas
+- ✅ Código no GitHub (phmrmkv/Ninho) e releases 0.6.0, 0.6.1 e 0.6.2 com x64, x86 e SHA256SUMS.txt
+- ✅ Discussions, aviso privado de falhas e etiquetas ligados no GitHub
 - ✅ Revisão de bugs do código novo: atualização só com SHA-256, importador numa cópia dos dados, reinício sem servidores órfãos

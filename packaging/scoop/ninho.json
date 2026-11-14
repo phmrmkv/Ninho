@@ -6,11 +6,11 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/phmrmkv/Ninho/releases/download/v0.6.2/Ninho-x64.exe#/ninho.exe",
-            "hash": "REPLACE_WITH_SHA256"
+            "hash": "ebee06b4fb8082a4f5f8a60413faca1974067ed66ebdba5fe653e30f4f099de1"
         },
         "32bit": {
             "url": "https://github.com/phmrmkv/Ninho/releases/download/v0.6.2/Ninho-x86.exe#/ninho.exe",
-            "hash": "REPLACE_WITH_SHA256"
+            "hash": "116f4f0c2613a785856cfea1fa905d8809a7285a8cff3b57f6e40b45701c0f2c"
         }
     },
     "bin": "ninho.exe",
