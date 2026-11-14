@@ -4,6 +4,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use crate::i18n::{Lang, tr};
 use crate::settings::{ServiceCfg, Settings};
 use crate::{certs, phpini, ports, services, sites};
 
@@ -29,6 +30,15 @@ pub fn counts(list: &[Finding]) -> (usize, usize, usize) {
     (n(Level::Ok), n(Level::Warn), n(Level::Error))
 }
 
+/// A translated text with its {placeholders} filled in ("{port}", "{name}"...).
+fn f(l: Lang, key: &str, pairs: &[(&str, &str)]) -> String {
+    let mut s = tr(l, key).to_string();
+    for (k, v) in pairs {
+        s = s.replace(&format!("{{{k}}}"), v);
+    }
+    s
+}
+
 fn mk(level: Level, title: impl Into<String>, detail: impl Into<String>, fix: Option<&str>) -> Finding {
     Finding { level, title: title.into(), detail: detail.into(), fix: fix.map(str::to_string) }
 }
@@ -47,25 +57,26 @@ pub fn check(s: &Settings) -> Vec<Finding> {
     let mut out = Vec::new();
     // One look at the ports for all checks, so the servers are compared against the same picture.
     let listeners = ports::listening();
-    guarded("Visual C++", &mut out, |o| vc_runtime(s, o));
-    guarded("Servidores e portas", &mut out, |o| servers(s, &listeners, o));
-    guarded("Apache", &mut out, |o| apache(s, o));
-    guarded("PHP", &mut out, |o| php(s, o));
-    guarded("MySQL", &mut out, |o| mysql(s, &listeners, o));
-    guarded("Sites", &mut out, |o| site_folder(s, o));
-    guarded("Arquivo hosts", &mut out, |o| hosts(s, o));
-    guarded("HTTPS", &mut out, |o| https(s, o));
-    guarded("Disco", &mut out, |o| disk(s, o));
+    let l = s.language;
+    guarded(l, "Visual C++", &mut out, |o| vc_runtime(s, o));
+    guarded(l, tr(l, "h_grp_servers"), &mut out, |o| servers(s, &listeners, o));
+    guarded(l, "Apache", &mut out, |o| apache(s, o));
+    guarded(l, "PHP", &mut out, |o| php(s, o));
+    guarded(l, "MySQL", &mut out, |o| mysql(s, &listeners, o));
+    guarded(l, tr(l, "h_grp_sites"), &mut out, |o| site_folder(s, o));
+    guarded(l, tr(l, "h_grp_hosts"), &mut out, |o| hosts(s, o));
+    guarded(l, "HTTPS", &mut out, |o| https(s, o));
+    guarded(l, tr(l, "h_grp_disk"), &mut out, |o| disk(s, o));
     out
 }
 
 /// One check never takes the others down: a panic inside it becomes a finding, and what it found before stays.
-fn guarded(name: &str, out: &mut Vec<Finding>, f: impl FnOnce(&mut Vec<Finding>)) {
+fn guarded(l: Lang, name: &str, out: &mut Vec<Finding>, run_check: impl FnOnce(&mut Vec<Finding>)) {
     let mut local = Vec::new();
-    let r = catch_unwind(AssertUnwindSafe(|| f(&mut local)));
+    let r = catch_unwind(AssertUnwindSafe(|| run_check(&mut local)));
     out.append(&mut local);
     if r.is_err() {
-        out.push(warn(format!("Não consegui verificar: {name}"), "A verificação falhou de forma inesperada.", "Tente de novo; se repetir, veja a atividade do Ninho."));
+        out.push(warn(f(l, "h_guard_t", &[("name", name)]), tr(l, "h_guard_d"), tr(l, "h_guard_fix")));
     }
 }
 
@@ -90,17 +101,18 @@ fn run(exe: &Path, args: &[&str], cwd: Option<&Path>) -> Option<(bool, String)> 
 /// Apache, PHP and PostgreSQL builds for Windows are linked against the 2015-2022 runtime; without it they die
 /// at start with a missing-DLL popup, which is the most common "nothing starts" cause.
 fn vc_runtime(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     let win = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
     let sys = Path::new(&win).join("System32");
     let missing: Vec<&str> = ["vcruntime140.dll", "msvcp140.dll"].into_iter().filter(|f| !sys.join(f).is_file()).collect();
     let needed = ["apache", "php", "postgres"].iter().any(|k| services::version_dir(s, k).is_some());
     if missing.is_empty() {
-        out.push(ok("Visual C++ 2015-2022 instalado", "O Apache, o PHP e o PostgreSQL precisam dele e ele está presente."));
+        out.push(ok(tr(l, "h_vc_ok_t"), tr(l, "h_vc_ok_d")));
         return;
     }
-    let detail = format!("Faltam no Windows: {}. Sem eles o Apache, o PHP e o PostgreSQL não abrem.", missing.join(", "));
-    let fix = "Instale o \"Visual C++ Redistributable 2015-2022 (x64)\": https://aka.ms/vs/17/release/vc_redist.x64.exe";
-    out.push(if needed { err("Falta o Visual C++ 2015-2022", detail, fix) } else { warn("Falta o Visual C++ 2015-2022", detail, fix) });
+    let detail = f(l, "h_vc_miss_d", &[("files", &missing.join(", "))]);
+    let (title, fix) = (tr(l, "h_vc_miss_t"), tr(l, "h_vc_fix"));
+    out.push(if needed { err(title, detail, fix) } else { warn(title, detail, fix) });
 }
 
 // ---------------------------------------------------------------- servers and ports
@@ -154,39 +166,38 @@ pub(crate) fn duplicate_ports(list: &[(String, u16)]) -> Vec<(u16, Vec<String>)>
     out
 }
 
-fn port_finding(name: &str, port: u16, image: &str, listeners: &[ports::Listener], reserved: &[(u16, u16)]) -> Finding {
+fn port_finding(l: Lang, name: &str, port: u16, image: &str, listeners: &[ports::Listener], reserved: &[(u16, u16)]) -> Finding {
     let holder = ports::owner(listeners, port);
     match port_status(holder.map(|l| l.program.as_str()), image) {
-        PortStatus::Own => ok(format!("{name}: porta {port} em uso por ele mesmo"), "O servidor está rodando."),
+        PortStatus::Own => ok(f(l, "h_port_own_t", &[("name", name), ("port", &port.to_string())]), tr(l, "h_port_own_d")),
         PortStatus::Free if reserved.iter().any(|&(a, b)| (a..=b).contains(&port)) => err(
-            format!("{name}: a porta {port} está reservada pelo Windows"),
-            "O Windows separou essa faixa de portas (Hyper-V, WSL ou Docker costumam fazer isso) e nenhum programa consegue abri-la.",
-            "Escolha outra porta para este servidor em Configurações.",
+            f(l, "h_port_res_t", &[("name", name), ("port", &port.to_string())]),
+            tr(l, "h_port_res_d"),
+            tr(l, "h_port_res_fix"),
         ),
-        PortStatus::Free => ok(format!("{name}: porta {port} livre"), "Nada está usando essa porta."),
+        PortStatus::Free => ok(f(l, "h_port_free_t", &[("name", name), ("port", &port.to_string())]), tr(l, "h_port_free_d")),
         PortStatus::Other => {
-            let l = holder.expect("Other has a holder");
-            let who = if l.program.is_empty() { format!("PID {}", l.pid) } else { format!("{} (PID {})", l.program, l.pid) };
-            let sys = ports::is_system(&l.program, l.pid);
+            let h = holder.expect("Other has a holder");
+            let pid = h.pid.to_string();
+            let who = if h.program.is_empty() { f(l, "h_pid", &[("pid", &pid)]) } else { f(l, "h_who", &[("program", &h.program), ("pid", &pid)]) };
+            let sys = ports::is_system(&h.program, h.pid);
+            let port_s = port.to_string();
             let detail = if sys {
-                format!("A porta {port} está nas mãos de {who}, que é parte do próprio Windows (portas baixas como a 1025 costumam ser dele).")
+                f(l, "h_port_sys_d", &[("port", &port_s), ("who", &who)])
             } else {
-                format!("A porta {port} já está em uso por {who}, então {name} não consegue iniciar.")
+                f(l, "h_port_busy_d", &[("port", &port_s), ("who", &who), ("name", name)])
             };
-            let fix = if sys {
-                "Não feche esse programa: mude a porta deste servidor em Configurações."
-            } else {
-                "Feche esse programa (aba Portas) ou mude a porta deste servidor em Configurações."
-            };
-            err(format!("{name}: a porta {port} está ocupada"), detail, fix)
+            let fix = tr(l, if sys { "h_port_sys_fix" } else { "h_port_busy_fix" });
+            err(f(l, "h_port_busy_t", &[("name", name), ("port", &port_s)]), detail, fix)
         }
     }
 }
 
 fn servers(s: &Settings, listeners: &[ports::Listener], out: &mut Vec<Finding>) {
+    let l = s.language;
     let on: Vec<&ServiceCfg> = s.services.iter().filter(|c| c.enabled).collect();
     if on.is_empty() {
-        out.push(warn("Nenhum servidor ligado", "Todos os servidores estão desligados em Configurações.", "Ligue ao menos o Apache e o MySQL."));
+        out.push(warn(tr(l, "h_none_t"), tr(l, "h_none_d"), tr(l, "h_none_fix")));
         return;
     }
     let reserved = excluded_ranges();
@@ -195,25 +206,22 @@ fn servers(s: &Settings, listeners: &[ports::Listener], out: &mut Vec<Finding>) 
         let d = services::def(&c.key);
         if services::version_dir(s, &c.id).is_none() {
             out.push(warn(
-                format!("{name} não está instalado"),
-                format!("Não achei {} em {}\\bin\\{}.", d.exe, s.root, d.dir),
-                "Baixe pela janela \"Baixar e atualizar\" ou desligue este servidor.",
+                f(l, "h_notinst_t", &[("name", &name)]),
+                f(l, "h_notinst_d", &[("exe", &d.exe.to_string()), ("dir", &format!("{}\\bin\\{}", s.root, d.dir))]),
+                tr(l, "h_notinst_fix"),
             ));
             continue;
         }
-        out.push(port_finding(&name, c.port, &services::image(&c.key), listeners, &reserved));
+        out.push(port_finding(l, &name, c.port, &services::image(&c.key), listeners, &reserved));
     }
     // HTTPS needs Apache on 443 too.
     if s.https && on.iter().any(|c| c.key == "apache") {
-        out.push(port_finding("Apache (HTTPS)", 443, &services::image("apache"), listeners, &reserved));
+        out.push(port_finding(l, "Apache (HTTPS)", 443, &services::image("apache"), listeners, &reserved));
     }
     let pairs: Vec<(String, u16)> = on.iter().map(|c| (c.title(), c.port)).collect();
     for (port, names) in duplicate_ports(&pairs) {
-        out.push(err(
-            format!("Porta {port} repetida"),
-            format!("{} estão na mesma porta; só um deles consegue iniciar.", names.join(" e ")),
-            "Dê uma porta diferente a cada servidor em Configurações.",
-        ));
+        let port_s = port.to_string();
+        out.push(err(f(l, "h_dup_t", &[("port", &port_s)]), f(l, "h_dup_d", &[("names", &names.join(", "))]), tr(l, "h_dup_fix")));
     }
 }
 
@@ -231,10 +239,12 @@ pub(crate) fn httpd_verdict(text: &str) -> Result<(), String> {
         .find(|l| l.contains("AH0") || l.to_ascii_lowercase().contains("error") || l.to_ascii_lowercase().contains("cannot"))
         .or(lines.first())
         .map(|l| l.chars().take(300).collect::<String>());
-    Err(pick.unwrap_or_else(|| "o Apache não respondeu".into()))
+    // Empty when Apache said nothing: the caller words that in the player's language.
+    Err(pick.unwrap_or_default())
 }
 
 fn apache(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     if !s.svc("apache").enabled {
         return;
     }
@@ -243,26 +253,25 @@ fn apache(s: &Settings, out: &mut Vec<Finding>) {
     // conf/ninho.conf is written at the first start; before that httpd.conf still points at the zip's own folder
     // and the test would complain about folders that are fine.
     if !v.join(r"conf\ninho.conf").is_file() {
-        out.push(ok("Apache: configuração ainda não preparada", "O Ninho prepara o httpd.conf no primeiro início; o teste de sintaxe roda depois disso."));
+        out.push(ok(tr(l, "h_apc_pending_t"), tr(l, "h_apc_pending_d")));
     } else {
         match run(&exe, &["-t"], Some(&v)) {
-            None => out.push(err("Apache não abriu para o teste", format!("Não consegui executar {}.", exe.display()), "Veja se o Visual C++ está instalado e se o antivírus não bloqueou o httpd.exe.")),
+            None => out.push(err(tr(l, "h_apc_nostart_t"), f(l, "h_apc_nostart_d", &[("exe", &exe.display().to_string())]), tr(l, "h_apc_nostart_fix"))),
             Some((_, text)) => match httpd_verdict(&text) {
-                Ok(()) => out.push(ok("Configuração do Apache válida", "O teste \"httpd -t\" respondeu Syntax OK.")),
-                Err(e) => out.push(err("Configuração do Apache com erro", e, "Abra o httpd.conf (botão Config do Apache), corrija a linha indicada e teste de novo.")),
+                Ok(()) => out.push(ok(tr(l, "h_apc_ok_t"), tr(l, "h_apc_ok_d"))),
+                Err(e) => {
+                    let e = if e.is_empty() { tr(l, "h_httpd_noresp").to_string() } else { e };
+                    out.push(err(tr(l, "h_apc_bad_t"), e, tr(l, "h_apc_bad_fix")));
+                }
             },
         }
     }
     // PHP as an Apache module.
     if let Some(php) = services::version_dir(s, "php") {
         if php_module(&php).is_some() {
-            out.push(ok("Módulo PHP do Apache presente", "O PHP escolhido tem o módulo para rodar dentro do Apache."));
+            out.push(ok(tr(l, "h_mod_ok_t"), tr(l, "h_mod_ok_d")));
         } else {
-            out.push(warn(
-                "O PHP escolhido não tem módulo para o Apache",
-                "Só as versões \"Thread Safe\" (TS) trazem o php*apache2_4.dll; sem ele os arquivos .php não são executados pelo Apache.",
-                "Baixe um PHP Thread Safe (TS) ou use o servidor PHP embutido do Ninho.",
-            ));
+            out.push(warn(tr(l, "h_mod_no_t"), tr(l, "h_mod_no_d"), tr(l, "h_mod_no_fix")));
         }
     }
 }
@@ -293,93 +302,80 @@ pub(crate) fn extension_dir_value(ini: &str) -> Option<String> {
 }
 
 fn php(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     let Some(v) = services::version_dir(s, "php") else { return };
     let label = v.file_name().unwrap_or_default().to_string_lossy().into_owned();
     // -n: no php.ini, so a broken ini cannot hide a broken PHP (and the other way round).
     match run(&v.join("php.exe"), &["-n", "-v"], Some(&v)) {
         Some((true, text)) if text.contains("PHP") => {
-            out.push(ok(format!("PHP {label} executa"), text.lines().map(str::trim).find(|l| l.starts_with("PHP")).unwrap_or("php -v respondeu").to_string()));
+            let line = text.lines().map(str::trim).find(|x| x.starts_with("PHP")).unwrap_or(tr(l, "h_php_run_d")).to_string();
+            out.push(ok(f(l, "h_php_run_t", &[("label", &label)]), line));
         }
         _ => {
-            out.push(err(
-                format!("PHP {label} não executa"),
-                "O php.exe não respondeu ao comando \"php -n -v\".",
-                "Instale o Visual C++ 2015-2022 ou baixe o PHP de novo (o antivírus pode ter bloqueado o php.exe).",
-            ));
+            out.push(err(f(l, "h_php_norun_t", &[("label", &label)]), tr(l, "h_php_norun_d"), tr(l, "h_php_norun_fix")));
             return;
         }
     }
     let ini = v.join("php.ini");
     let Ok(text) = std::fs::read_to_string(&ini) else {
-        out.push(warn(
-            "PHP sem php.ini",
-            format!("Não achei {}. Sem ele o PHP roda com tudo desligado (sem mysqli, mbstring, curl...).", ini.display()),
-            "Copie php.ini-development para php.ini na pasta do PHP.",
-        ));
+        out.push(warn(tr(l, "h_ini_none_t"), f(l, "h_ini_none_d", &[("path", &ini.display().to_string())]), tr(l, "h_ini_none_fix")));
         return;
     };
-    out.push(ok("php.ini encontrado", ini.display().to_string()));
+    out.push(ok(tr(l, "h_ini_ok_t"), ini.display().to_string()));
     match extension_dir_value(&text) {
-        None => out.push(warn("php.ini sem extension_dir", "Sem essa linha o PHP não acha as extensões.", "No php.ini, deixe a linha extension_dir = \"ext\" sem o ponto e vírgula.")),
+        None => out.push(warn(tr(l, "h_extdir_none_t"), tr(l, "h_extdir_none_d"), tr(l, "h_extdir_none_fix"))),
         Some(d) => {
             let p = PathBuf::from(&d);
             let full = if p.is_absolute() { p } else { v.join(p) };
             if !full.is_dir() {
-                out.push(warn("extension_dir aponta para uma pasta que não existe", format!("{} não foi encontrada.", full.display()), "Ajuste extension_dir no php.ini para a pasta ext do PHP."));
+                out.push(warn(tr(l, "h_extdir_bad_t"), f(l, "h_extdir_bad_d", &[("path", &full.display().to_string())]), tr(l, "h_extdir_bad_fix")));
             }
         }
     }
     let bad = missing_exts(&phpini::list(&ini), KEY_EXTENSIONS);
     if bad.is_empty() {
-        out.push(ok("Extensões principais do PHP ligadas", KEY_EXTENSIONS.join(", ")));
+        out.push(ok(tr(l, "h_exts_ok_t"), KEY_EXTENSIONS.join(", ")));
     } else {
-        out.push(warn(
-            "Extensões do PHP desligadas",
-            format!("Desligadas ou ausentes no php.ini: {}. Muitos sistemas (WordPress, Laravel) precisam delas.", bad.join(", ")),
-            "Ligue em \"Extensões do PHP\" ou tire o ponto e vírgula da linha extension= no php.ini.",
-        ));
+        out.push(warn(tr(l, "h_exts_bad_t"), f(l, "h_exts_bad_d", &[("list", &bad.join(", "))]), tr(l, "h_exts_bad_fix")));
     }
 }
 
 // ---------------------------------------------------------------- MySQL
 
 /// A short plain-language reason for a failed `SELECT 1`.
-pub(crate) fn mysql_reason(e: &str) -> String {
+pub(crate) fn mysql_reason(l: Lang, e: &str) -> String {
     let low = e.to_ascii_lowercase();
     if low.contains("access denied") {
-        "o root tem senha (o Ninho espera root sem senha)".into()
+        tr(l, "h_my_reason_pw").into()
     } else if low.contains("can't connect") || low.contains("cant connect") || low.contains("2003") {
-        "não consegui conectar na porta".into()
+        tr(l, "h_my_reason_conn").into()
     } else {
-        e.lines().find(|l| !l.trim().is_empty()).unwrap_or("erro desconhecido").trim().chars().take(200).collect()
+        e.lines().find(|l| !l.trim().is_empty()).unwrap_or(tr(l, "h_my_reason_unk")).trim().chars().take(200).collect()
     }
 }
 
 fn mysql(s: &Settings, listeners: &[ports::Listener], out: &mut Vec<Finding>) {
+    let l = s.language;
     for c in s.services.iter().filter(|c| c.enabled && c.key == "mysql") {
         let Some(v) = services::version_dir(s, &c.id) else { continue };
         let name = c.title();
         // Data folder: the first MySQL cannot start without it; an extra one is created at its first start.
         match services::mysql_data(s, c, &v) {
-            Some(d) if Path::new(&d).is_dir() => out.push(ok(format!("{name}: pasta de dados encontrada"), d)),
-            Some(d) if c.is_extra() => out.push(ok(format!("{name}: pasta de dados será criada no primeiro início"), d)),
-            Some(d) => out.push(err(
-                format!("{name}: a pasta de dados não existe"),
-                format!("O my.ini aponta para {d}, que não foi encontrada.\nO MySQL não inicia sem ela."),
-                "Corrija a linha datadir no my.ini ou recupere a pasta de dados.",
-            )),
-            None => out.push(warn(format!("{name}: my.ini sem datadir"), "Não achei a linha datadir no my.ini deste MySQL.", "Confira o my.ini (botão Config).")),
+            Some(d) if Path::new(&d).is_dir() => out.push(ok(f(l, "h_my_data_ok_t", &[("name", &name)]), d)),
+            Some(d) if c.is_extra() => out.push(ok(f(l, "h_my_data_new_t", &[("name", &name)]), d)),
+            Some(d) => out.push(err(f(l, "h_my_data_no_t", &[("name", &name)]), f(l, "h_my_data_no_d", &[("path", &d)]), tr(l, "h_my_data_no_fix"))),
+            None => out.push(warn(f(l, "h_my_nodd_t", &[("name", &name)]), tr(l, "h_my_nodd_d"), tr(l, "h_my_nodd_fix"))),
         }
         let running = port_status(ports::owner(listeners, c.port).map(|l| l.program.as_str()), &services::image("mysql")) == PortStatus::Own;
         if !running {
             continue;
         }
         match services::mysql_exec(s, &c.id, "SELECT 1", "") {
-            Ok(()) => out.push(ok(format!("{name}: responde a consultas"), "Entrei como root, sem senha, e o SELECT 1 funcionou.")),
+            Ok(()) => out.push(ok(f(l, "h_my_q_t", &[("name", &name)]), tr(l, "h_my_q_d"))),
             Err(e) => out.push(warn(
-                format!("{name} não aceitou o login do root"),
-                format!("O servidor está de pé na porta {}, mas {}.", c.port, mysql_reason(&e)),
-                "O criar-banco do Ninho usa root sem senha. Se você pôs senha, use o seu cliente SQL; senão veja o log do MySQL.",
+                f(l, "h_my_login_t", &[("name", &name)]),
+                f(l, "h_my_login_d", &[("port", &c.port.to_string()), ("reason", &mysql_reason(l, &e))]),
+                tr(l, "h_my_login_fix"),
             )),
         }
     }
@@ -388,16 +384,13 @@ fn mysql(s: &Settings, listeners: &[ports::Listener], out: &mut Vec<Finding>) {
 // ---------------------------------------------------------------- sites and hosts
 
 fn site_folder(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     if !Path::new(&s.doc_root).is_dir() {
-        out.push(warn(
-            "Pasta dos sites não existe",
-            format!("{} não foi encontrada.", s.doc_root),
-            "Crie a pasta ou escolha outra em Configurações.",
-        ));
+        out.push(warn(tr(l, "h_site_no_t"), f(l, "h_site_no_d", &[("path", &s.doc_root)]), tr(l, "h_site_no_fix")));
         return;
     }
     let n = sites::list(s).len();
-    out.push(ok(format!("Pasta dos sites: {n} site(s)"), s.doc_root.clone()));
+    out.push(ok(f(l, "h_site_ok_t", &[("n", &n.to_string())]), s.doc_root.clone()));
 }
 
 fn hosts_path() -> PathBuf {
@@ -411,51 +404,45 @@ pub(crate) fn count_marked(hosts: &str) -> usize {
 }
 
 fn hosts(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     let path = hosts_path();
     let Ok(text) = std::fs::read_to_string(&path) else {
-        out.push(warn(
-            "Não consegui ler o arquivo hosts",
-            format!("{} não abriu para leitura; os endereços .test podem não funcionar.", path.display()),
-            "Veja se o antivírus ou outro programa está bloqueando o arquivo.",
-        ));
+        out.push(warn(tr(l, "h_hosts_read_t"), f(l, "h_hosts_read_d", &[("path", &path.display().to_string())]), tr(l, "h_hosts_read_fix")));
         return;
     };
     let marked = count_marked(&text);
     // Opening for append changes nothing; it only tells whether Windows would let us write without asking.
     let writable = std::fs::OpenOptions::new().append(true).open(&path).is_ok();
-    let access = if writable { "O Ninho pode atualizá-lo direto." } else { "Para atualizá-lo o Ninho pede permissão de administrador (é normal)." };
+    let access = tr(l, if writable { "h_hosts_w" } else { "h_hosts_a" });
     if !s.auto_vhosts {
-        out.push(ok("Endereços automáticos desligados", format!("{marked} linha(s) do Ninho no hosts. {access}")));
+        out.push(ok(tr(l, "h_hosts_off_t"), f(l, "h_hosts_off_d", &[("n", &marked.to_string()), ("access", access)])));
         return;
     }
     let want = sites::list(s).len();
     if marked == want {
-        out.push(ok(format!("Arquivo hosts em dia ({marked} endereço(s))"), access));
+        out.push(ok(f(l, "h_hosts_ok_t", &[("n", &marked.to_string())]), access));
     } else {
         out.push(warn(
-            "Arquivo hosts fora de sincronia",
-            format!("Há {want} site(s) na pasta, mas {marked} linha(s) do Ninho no hosts. {access}"),
-            "Abra a aba Sites e atualize; aceite o pedido de permissão do Windows.",
+            tr(l, "h_hosts_sync_t"),
+            f(l, "h_hosts_sync_d", &[("want", &want.to_string()), ("marked", &marked.to_string()), ("access", access)]),
+            tr(l, "h_hosts_sync_fix"),
         ));
     }
 }
 
 fn https(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     if !s.https {
         return;
     }
     // Same file name certs.rs gives the local authority's certificate.
     let crt = certs::dir(s).join("ninho-ca.crt");
     if !crt.is_file() {
-        out.push(warn("HTTPS ligado, mas sem certificado", "A autoridade local do Ninho ainda não foi criada.", "Atualize os sites (aba Sites) com o Apache instalado; ela é criada nessa hora."));
+        out.push(warn(tr(l, "h_tls_nocert_t"), tr(l, "h_tls_nocert_d"), tr(l, "h_tls_nocert_fix")));
     } else if certs::ca_trusted(s) {
-        out.push(ok("HTTPS: certificado local confiável", "O Windows confia na autoridade do Ninho."));
+        out.push(ok(tr(l, "h_tls_ok_t"), tr(l, "h_tls_ok_d")));
     } else {
-        out.push(warn(
-            "HTTPS: o Windows ainda não confia no certificado",
-            "O navegador vai mostrar aviso de site inseguro nos endereços https.",
-            "Use \"Confiar no certificado\" nas configurações de HTTPS.",
-        ));
+        out.push(warn(tr(l, "h_tls_untr_t"), tr(l, "h_tls_untr_d"), tr(l, "h_tls_untr_fix")));
     }
 }
 
@@ -496,17 +483,20 @@ fn free_bytes(_path: &Path) -> Option<u64> {
     None
 }
 
-fn gb(b: u64) -> String {
-    format!("{:.1}", b as f64 / GB as f64).replace('.', ",")
+/// Gigabytes with one decimal, written the way the language writes numbers (1,5 or 1.5).
+fn gb(l: Lang, b: u64) -> String {
+    let n = format!("{:.1}", b as f64 / GB as f64);
+    if tr(l, "h_decimal") == "," { n.replace('.', ",") } else { n }
 }
 
 fn disk(s: &Settings, out: &mut Vec<Finding>) {
+    let l = s.language;
     let Some(free) = free_bytes(Path::new(&s.root)) else { return };
-    let title = format!("Espaço livre no disco: {} GB", gb(free));
+    let title = f(l, "h_disk_t", &[("gb", &gb(l, free))]);
     match disk_level(free) {
-        Level::Ok => out.push(ok(title, format!("Na unidade de {}.", s.root))),
-        Level::Warn => out.push(warn(title, "Está ficando pouco; bancos de dados e logs crescem com o tempo.", "Libere espaço na unidade onde o Ninho está.")),
-        Level::Error => out.push(err(title, "Quase sem espaço: o MySQL pode corromper dados e os downloads vão falhar.", "Libere espaço agora na unidade onde o Ninho está.")),
+        Level::Ok => out.push(ok(title, f(l, "h_disk_ok_d", &[("path", &s.root)]))),
+        Level::Warn => out.push(warn(title, tr(l, "h_disk_warn_d"), tr(l, "h_disk_warn_fix"))),
+        Level::Error => out.push(err(title, tr(l, "h_disk_err_d"), tr(l, "h_disk_err_fix"))),
     }
 }
 
@@ -575,13 +565,17 @@ mod tests {
         assert_eq!(disk_level(2 * GB), Level::Ok);
         assert_eq!(disk_level(GB), Level::Warn);
         assert_eq!(disk_level(GB / 4), Level::Error);
-        assert_eq!(gb(3 * GB / 2), "1,5");
+        let (pt, en) = (Lang::from_code("pt-BR"), Lang::from_code("en"));
+        assert_eq!(gb(pt, 3 * GB / 2), "1,5");
+        assert_eq!(gb(en, 3 * GB / 2), "1.5");
     }
 
     #[test]
     fn mysql_reasons() {
-        assert!(mysql_reason("ERROR 1045 (28000): Access denied for user 'root'").contains("senha"));
-        assert!(mysql_reason("ERROR 2003 (HY000): Can't connect to MySQL server").contains("conectar"));
+        let pt = Lang::from_code("pt-BR");
+        assert_eq!(mysql_reason(pt, "ERROR 1045 (28000): Access denied for user 'root'"), tr(pt, "h_my_reason_pw"));
+        assert_eq!(mysql_reason(pt, "ERROR 2003 (HY000): Can't connect to MySQL server"), tr(pt, "h_my_reason_conn"));
+        assert_eq!(mysql_reason(pt, "boom\nx"), "boom");
     }
 
     #[test]
@@ -593,11 +587,28 @@ mod tests {
     #[test]
     fn a_panic_inside_a_check_is_contained() {
         let mut out = Vec::new();
-        guarded("x", &mut out, |o| {
+        guarded(Lang::from_code("en"), "x", &mut out, |o| {
             o.push(ok("before", ""));
             panic!("boom");
         });
         assert_eq!(out.len(), 2);
         assert_eq!(out[1].level, Level::Warn);
+    }
+
+    #[test]
+    fn english_findings_have_no_portuguese() {
+        let en = Lang::from_code("en");
+        let mut out = Vec::new();
+        guarded(en, "Disk", &mut out, |_| panic!("boom"));
+        let listeners = [ports::Listener { port: 80, addrs: vec![], pid: 4242, program: "skype.exe".into() }];
+        out.push(port_finding(en, "Apache", 80, "httpd.exe", &listeners, &[]));
+        for x in &out {
+            let all = format!("{} {} {}", x.title, x.detail, x.fix.clone().unwrap_or_default());
+            for pt in ["Não", "não", "porta ", "Tente", "Feche", "Servidor", "está"] {
+                assert!(!all.contains(pt), "{pt:?} in {all}");
+            }
+            assert!(!all.contains('?'), "missing key: {all}");
+        }
+        assert!(out[1].title.contains("port 80") && out[1].detail.contains("skype.exe (PID 4242)"), "{:?}", out[1]);
     }
 }
