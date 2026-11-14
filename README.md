@@ -55,6 +55,8 @@ source (MIT or GPL-3.0, your choice), portable** local development environment w
 | **Share a site** | A public `https://….trycloudflare.com` link in one click (Cloudflare quick tunnel, no account) |
 | **Databases** | Back up, restore and import `.sql` files for every MySQL server |
 | **Xdebug** | Downloads the build that matches your PHP and turns it on or off |
+| **Project file** | `ninho.project.json` in a site's folder: PHP and Node.js version, servers to start, port and database, shared through your repo |
+| **Root password** | Change the MySQL / MariaDB root password from the Config menu; Ninho remembers it encrypted with Windows DPAPI |
 | **Quick projects** | Blank, WordPress, Laravel or Symfony, with its database created at the same time |
 | **Ports** | Every listening port with program, PID and reach (this PC or the network); test a port; stop a program safely (Windows' own processes are protected) |
 | **Mail catcher** | Mailpit catches every e-mail your app sends; open the inbox from *Admin* |
@@ -95,6 +97,44 @@ scoop install ninho
 Coming from XAMPP or WampServer? On the first start, or later in the menu, Ninho offers to import your sites and databases. The old install is only read.
 
 Coming from Laragon? Put `Ninho.exe` in `C:\laragon`: your `bin`, `data\mysql-8.4` and `www` are used as they are.
+
+## Project file (`ninho.project.json`)
+
+Put an optional `ninho.project.json` in a site's folder and commit it to your repo, so everyone who opens the project in
+Ninho gets the same setup. Every field is optional; unknown fields are ignored (and kept when Ninho writes the file).
+
+```json
+{
+  "php": "8.3",
+  "node": "22",
+  "servers": ["mysql", "redis"],
+  "port": 8100,
+  "database": "shop"
+}
+```
+
+| Field | What it does |
+|---|---|
+| `php` | PHP version of the site's own server. Ninho picks the newest installed PHP with the same major.minor (`"8.3"` matches 8.3.36). Use a string: `"8.10"` as a number would become 8.1. If it is not installed the row says so and offers *Get PHP 8.3*; until then the default PHP is used. |
+| `node` | Node.js version, used when the folder has no `.nvmrc` / `.node-version` (those win). |
+| `servers` | Kinds of server to start with the site (`mysql`, `mariadb`, `redis`, `postgres`, `memcached`, `mailpit`, `apache`, `nginx`). Only the ones not running yet are started. |
+| `port` | Port of the site's own PHP server (replaces the one Ninho picked). |
+| `database` | Database the project needs on its MySQL / MariaDB (the first of those listed in `servers`, else MySQL). When it is missing the row shows *Create database shop*; Ninho never creates it without that click. |
+
+On the **Sites** tab a site with the file shows a *project* tag; a file that cannot be read shows its error on the row
+and changes nothing else. *More > Save project settings* writes the file from what the site runs with now.
+
+## Root password of MySQL and MariaDB
+
+*Config > Change root password…* on the MySQL (or MariaDB) row changes the `root` password of the running server with
+`ALTER USER`, using the server's own `mysql.exe`. Passwords never go on a command line: the current one travels in the
+`MYSQL_PWD` environment variable and the new one through standard input. Use plain keyboard characters (no accents):
+the Windows MySQL client does not pass accented characters through the environment safely.
+
+With *Remember the password on this PC* (on by default) Ninho keeps it in `ninho.json` as `root_pw_dpapi`, encrypted
+with Windows DPAPI for your user only (no plain text, and not readable by another Windows user or another PC). Ninho then
+uses it to stop the server politely, in the database tools, in the importer and for the project database check.
+*Config > Forget remembered password* removes it from `ninho.json` (the server keeps its password).
 
 ## Use Ninho from AI agents (MCP)
 
@@ -179,6 +219,8 @@ clique, direto dos sites oficiais. Não tem instalador: é só abrir o `Ninho.ex
 - **Primeira vez guiada:** uma janela de boas-vindas pergunta o idioma, a pasta do Ninho e o que baixar agora (Apache, PHP e MySQL já vêm marcados).
 - **Uma janela só:** abrir o Ninho de novo traz a janela que já está aberta, até da bandeja.
 - **Registro de falhas:** se o Ninho quebrar, o motivo vai para `tmp\ninho-crash.log` e uma mensagem mostra onde está.
+- **Arquivo do projeto:** um `ninho.project.json` na pasta do site (`php`, `node`, `servers`, `port`, `database`; veja *Project file* acima) deixa todo mundo com a mesma configuração; o botão *Mais > Salvar configuração do projeto* grava o arquivo.
+- **Senha do root:** *Config > Trocar senha do root…* troca a senha do MySQL / MariaDB e, se você quiser, o Ninho a lembra criptografada pelo Windows (DPAPI, só para o seu usuário).
 - **18 idiomas**, seguindo o idioma do Windows na primeira vez.
 
 Instalar por gerenciador de pacotes (funciona depois da primeira release):

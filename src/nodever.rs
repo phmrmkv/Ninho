@@ -199,7 +199,11 @@ fn normalize(raw: &str) -> Option<String> {
 /// The version a project asks for: `.nvmrc` or `.node-version` in its folder ("v20", "20.11.1", "lts/iron", "lts/*",
 /// "node"), normalized ("20", "20.11.1", "lts/iron", "lts/*", "node").
 pub fn wanted(dir: &Path) -> Option<String> {
-    [".nvmrc", ".node-version"].iter().find_map(|f| normalize(&std::fs::read_to_string(dir.join(f)).ok()?))
+    [".nvmrc", ".node-version"]
+        .iter()
+        .find_map(|f| normalize(&std::fs::read_to_string(dir.join(f)).ok()?))
+        // No .nvmrc: what ninho.project.json asks for.
+        .or_else(|| crate::project::node_of(dir).and_then(|v| normalize(&v)))
 }
 
 /// Pick from `installed` (any order) what `wanted` means. `lts` lists (codename in lower case, major) of the LTS lines

@@ -24,6 +24,9 @@ use crate::sites;
 use crate::templates;
 use crate::tray;
 
+mod projui;
+mod pwui;
+
 // ---------- Theme: semantic color tokens (light / dark), control sizes, one button recipe ----------
 // Names follow the owner's design system: bg (page), surface (cards, fields), surface2 (hover, recessed), fg (text),
 // muted (secondary text), line (borders), brand (selected item), accent (the main action, one per screen), and a
@@ -134,6 +137,9 @@ pub struct NinhoApp {
     np_source: String,
     np_db: bool,
     np_err: Option<String>,
+    /// "Change root password" window and the project files of the sites.
+    pw: crate::mysqlpw::PwWin,
+    proj: crate::project::Tracker,
     show_db: bool,
     db_target: String,
     db_name: String,
@@ -290,6 +296,8 @@ impl NinhoApp {
             show_updates: false,
             logo: load_logo(&cc.egui_ctx),
             db: DbWin::default(),
+            pw: Default::default(),
+            proj: Default::default(),
             tunnels: std::collections::HashMap::new(),
             share_busy: Arc::new(AtomicBool::new(false)),
             log_win: LogWin::default(),
@@ -348,6 +356,7 @@ impl NinhoApp {
             }
             Ok("db") => app.show_db = true,
             Ok("dbtools") => app.open_db_tools("mysql"),
+            Ok("pw") => app.open_pw("mysql"),
             Ok("new") => app.open_new(),
             Ok("node") => app.open_node_win(),
             Ok("import") => app.open_import(),
@@ -1173,6 +1182,16 @@ impl NinhoApp {
             self.open_db_tools(id);
             ui.close();
         }
+        if matches!(c.key.as_str(), "mysql" | "mariadb") {
+            if ui.button(self.t("pw_menu")).clicked() {
+                self.open_pw(id);
+                ui.close();
+            }
+            if crate::mysqlpw::has_stored(&self.s, id) && ui.button(self.t("pw_forget")).on_hover_text(self.t("pw_forget_hint")).clicked() {
+                self.forget_pw(id);
+                ui.close();
+            }
+        }
         if ui.button(self.t("change_port")).clicked() {
             self.open_prefs();
             self.prefs_tab = 1;
@@ -1329,7 +1348,8 @@ impl NinhoApp {
         }
         let mut action: Option<(String, &'static str)> = None;
         let mut set_php: Option<(String, String)> = None;
-        let cfgs: Vec<settings::SiteCfg> = list.iter().map(|x| self.site_cfg(&x.folder)).collect();
+        let views = self.project_views(&list);
+        let cfgs: Vec<settings::SiteCfg> = list.iter().map(|x| self.site_cfg_eff(&x.folder)).collect();
         egui::ScrollArea::both().id_salt("sites").auto_shrink([false, false]).show(ui, |ui| {
             // One line per cell: long addresses and paths never wrap letter by letter.
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -1350,6 +1370,7 @@ impl NinhoApp {
                             if !kind.is_empty() {
                                 ui.label(RichText::new(format!(" {kind} ")).size(12.0).color(on_brand()).background_color(brand()));
                             }
+                            self.project_tag(ui, &views[idx]);
                         });
                         let url = sites::url(&self.s, site);
                         if ui.add_enabled(apache_on, egui::Link::new(RichText::new(&url).size(12.5))).clicked() {
@@ -1361,12 +1382,15 @@ impl NinhoApp {
                                 open(&local);
                             }
                         }
+                        self.project_notes(ui, &site.folder, &views[idx], &mut action);
                     });
                     ui.horizontal(|ui| {
                         // A Node.js project has no PHP version to pick.
                         if kind != "Node.js" {
                             let shown = if cfg.php.is_empty() { services::version_label(&self.s, "php").map(|v| short_ver(&v)).unwrap_or_else(|| "—".into()) } else { short_ver(&cfg.php) };
-                            egui::ComboBox::from_id_salt(format!("php-{}", site.folder)).width(84.0).selected_text(format!("PHP {shown}")).show_ui(ui, |ui| {
+                            // A project file that names a PHP version decides it.
+                            let pinned = matches!(views[idx].php, crate::project::PhpStatus::Pinned(_));
+                            let combo = ui.add_enabled_ui(!pinned, |ui| egui::ComboBox::from_id_salt(format!("php-{}", site.folder)).width(84.0).selected_text(format!("PHP {shown}")).show_ui(ui, |ui| {
                                 if ui.selectable_label(cfg.php.is_empty(), self.t("same_as_module")).clicked() {
                                     set_php = Some((site.folder.clone(), String::new()));
                                 }
@@ -1375,7 +1399,10 @@ impl NinhoApp {
                                         set_php = Some((site.folder.clone(), v.clone()));
                                     }
                                 }
-                            });
+                            }));
+                            if pinned {
+                                combo.response.on_disabled_hover_text(self.t("proj_pinned"));
+                            }
                         }
                         let b = if serving { button(self.t("unserve"), Tone::Neutral, CONTROL_SM) } else { button(self.t("serve"), Tone::Primary, CONTROL_SM) }.min_size(vec2(132.0, CONTROL_SM));
                         let serve_label = format!("{} {}", if serving { self.t("unserve") } else { self.t("serve") }, site.folder);
@@ -1394,7 +1421,7 @@ impl NinhoApp {
                         }
                         // Less used actions in a menu, so the row fits.
                         let (more_btn, _) = egui::containers::menu::MenuButton::from_button(button(format!("{} >", self.t("more")), Tone::Neutral, CONTROL_SM)).ui(ui, |ui| {
-                            for (key, what) in [("folder", "folder"), ("terminal", "terminal"), ("code", "code")] {
+                            for (key, what) in [("folder", "folder"), ("terminal", "terminal"), ("code", "code"), ("proj_save", "projsave")] {
                                 if ui.button(self.t(key)).clicked() {
                                     action = Some((site.folder.clone(), what));
                                     ui.close();
@@ -1471,9 +1498,18 @@ impl NinhoApp {
         }
         if let Some((folder, what)) = action {
             let dir = Path::new(&self.s.doc_root).join(&folder);
-            let cfg = self.site_cfg(&folder);
+            let cfg = self.site_cfg_eff(&folder);
             match what {
-                "serve" => self.serve_site(&folder, &cfg),
+                "serve" => {
+                    self.serve_site(&folder, &cfg);
+                    self.start_project_servers(&folder);
+                }
+                "projsave" => self.save_project_file(&folder),
+                "projdb" => self.create_project_db(&folder),
+                "phpget" => {
+                    self.show_updates = true;
+                    self.check_updates();
+                }
                 "unserve" => {
                     if let Some(mut ch) = self.shared.children.lock().unwrap().remove(&format!("site:{folder}")) {
                         let _ = ch.kill();
@@ -3022,10 +3058,10 @@ impl NinhoApp {
     }
 
     /// Open windows (not the welcome one) as small ids, 0..=12.
-    fn open_windows(&self) -> [bool; 13] {
+    fn open_windows(&self) -> [bool; 14] {
         [
             self.update_win, self.imp_win, self.show_prefs, self.show_project, self.show_db, self.show_new, self.show_updates,
-            self.db.open, self.log_win.open, self.node_win, self.health_win, self.confirm_kill.is_some(), self.db.confirm.is_some(),
+            self.db.open, self.log_win.open, self.node_win, self.health_win, self.confirm_kill.is_some(), self.db.confirm.is_some(), self.pw.open,
         ]
     }
 
@@ -3043,7 +3079,8 @@ impl NinhoApp {
             9 => self.node_win = false,
             10 => self.health_win = false,
             11 => self.confirm_kill = None,
-            _ => self.db.confirm = None,
+            12 => self.db.confirm = None,
+            _ => self.pw.open = false,
         }
     }
 
@@ -3179,6 +3216,9 @@ impl eframe::App for NinhoApp {
         }
         if self.show_db {
             self.db_window(&ctx);
+        }
+        if self.pw.open || self.pw.busy {
+            self.pw_window(&ctx);
         }
         if self.show_new {
             self.new_window(&ctx);

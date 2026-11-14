@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Change the MySQL / MariaDB root password from the Config menu. Ninho can remember it, encrypted with Windows DPAPI for your user, and uses it to stop the server, in the database tools, the importer and the project database check.
+- `ninho.project.json`: a project file with PHP and Node.js version, servers, port and database. Sites show a project tag, use the file's PHP, start its servers with the site and offer to create its database; *More > Save project settings* writes the file.
+
 ## 0.6.2 — 2026-11-13
 - A UX review of every screen: nothing cut off at the smallest window size, the same words for the same action, no exclamation marks, buttons all in the same three sizes.
 - Preferences: services and ports explained, with headers, readable ports, short version numbers and a Download button where nothing is installed; a theme choice; folder pickers.

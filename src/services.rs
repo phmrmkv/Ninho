@@ -619,12 +619,14 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
         ("mariadb", Some(v)) => {
             let mut cmd = Command::new(v.join("bin").join("mariadb-admin.exe"));
             cmd.args(["--no-defaults", "-h", "127.0.0.1", "-P", &port.to_string(), "-u", "root", "shutdown"]);
+            crate::mysqlpw::set_env(&mut cmd, s, id, "");
             hide_window(&mut cmd);
             let _ = cmd.output();
         }
         ("mysql", Some(v)) => {
             let mut cmd = Command::new(v.join(r"bin\mysqladmin.exe"));
             cmd.args(["-u", "root", "-h", "127.0.0.1", &format!("--port={port}"), "shutdown"]);
+            crate::mysqlpw::set_env(&mut cmd, s, id, "");
             hide_window(&mut cmd);
             let _ = cmd.output();
         }
@@ -665,12 +667,11 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
 /// Run a short command line tool from MySQL's folder (create database...) against one MySQL server.
 pub fn mysql_exec(s: &Settings, id: &str, sql: &str, password: &str) -> Result<(), String> {
     let v = version_dir(s, id).ok_or("MySQL is not installed")?;
-    let mut c = Command::new(v.join(r"bin\mysql.exe"));
+    let mut c = Command::new(crate::mysqlpw::client_exe(&v).ok_or("mysql.exe not found")?);
     c.args(["-u", "root", "-h", "127.0.0.1", &format!("--port={}", s.svc(id).port)]);
-    // Password through the environment: the command line is visible to every program on the PC.
-    if !password.is_empty() {
-        c.env("MYSQL_PWD", password);
-    }
+    // Password through the environment: the command line is visible to every program on the PC. Empty = the one
+    // Ninho remembers for this server (if any).
+    crate::mysqlpw::set_env(&mut c, s, id, password);
     c.args(["-e", sql]);
     hide_window(&mut c);
     let out = c.output().map_err(|e| e.to_string())?;
