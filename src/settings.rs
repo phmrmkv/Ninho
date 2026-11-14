@@ -228,6 +228,11 @@ impl Settings {
         self.services.iter().find(|c| c.id == id).expect("known server")
     }
 
+    /// The first server of this kind, when this system has that kind (Caddy and MongoDB are Windows-only for now).
+    pub fn kind(&self, key: &str) -> Option<&ServiceCfg> {
+        self.services.iter().find(|c| c.key == key)
+    }
+
     /// A free id for a new server of this kind: "<key>-2", "<key>-3"...
     pub fn next_id(&self, key: &str) -> String {
         (2..).map(|n| format!("{key}-{n}")).find(|id| !self.services.iter().any(|c| &c.id == id)).unwrap()

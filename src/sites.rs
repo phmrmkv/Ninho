@@ -227,13 +227,13 @@ pub fn refresh(shared: &Arc<Shared>, s: &Settings, verbose: bool) {
     };
     let ssl: Option<&dyn Fn(&str, &str) -> Option<String>> = if ssl_ok { Some(&make_ssl) } else { None };
     let a = write_confs(&root.join("etc").join("apache2").join("sites-enabled"), &sites, &s.doc_root, s.svc("apache").port, false, ssl);
-    let n = if s.svc("nginx").enabled {
-        write_confs(&root.join("etc").join("nginx").join("sites-enabled"), &sites, &s.doc_root, s.svc("nginx").port, true, None)
+    let n = if s.kind("nginx").is_some_and(|c| c.enabled) {
+        write_confs(&root.join("etc").join("nginx").join("sites-enabled"), &sites, &s.doc_root, s.kind("nginx").map_or(8080, |c| c.port), true, None)
     } else {
         0
     };
     // Caddy has one file for all the sites, written again at every start; here when the sites change meanwhile.
-    if s.svc("caddy").enabled && crate::services::version_dir(s, "caddy").is_some() {
+    if s.kind("caddy").is_some_and(|c| c.enabled) && crate::services::version_dir(s, "caddy").is_some() {
         let _ = crate::caddy::write_current(s);
     }
     if verbose || a + n > 0 {

@@ -240,9 +240,9 @@ pub fn write(s: &Settings) {
     }
     put(&dir.join("index.html"), &render(&collect(s)));
     put(&dir.join("phpinfo.php"), "<?php phpinfo();\n");
-    if s.svc("nginx").enabled && nginx_dir.is_dir() {
+    if s.kind("nginx").is_some_and(|c| c.enabled) && nginx_dir.is_dir() {
         let folders: Vec<String> = sites::list(s).into_iter().map(|x| x.folder).collect();
-        put(&nginx_dir.join(NGINX_FILE), &nginx_block(&slash(&dir), &slash(Path::new(&s.doc_root)), s.svc("nginx").port, &folders));
+        put(&nginx_dir.join(NGINX_FILE), &nginx_block(&slash(&dir), &slash(Path::new(&s.doc_root)), s.kind("nginx").map_or(8080, |c| c.port), &folders));
     }
 }
 

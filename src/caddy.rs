@@ -105,7 +105,7 @@ pub fn write_caddyfile(s: &Settings, php: bool) -> Result<PathBuf, String> {
         Vec::new()
     };
     let data = Path::new(&s.root).join(r"etc\caddy\data");
-    std::fs::write(&path, caddyfile(&sites, &s.doc_root, s.svc("caddy").port, php, &data.to_string_lossy())).map_err(|e| e.to_string())?;
+    std::fs::write(&path, caddyfile(&sites, &s.doc_root, s.kind("caddy").map_or(2015, |c| c.port), php, &data.to_string_lossy())).map_err(|e| e.to_string())?;
     Ok(path)
 }
 
