@@ -48,3 +48,27 @@ jobs:
       - name: Test
         if: matrix.test
         run: cargo test --release --target ${{ matrix.target }}
+      # Linux: the real thing with the runner's own packages. Ninho links the system PHP, Redis and PostgreSQL into
+      # ~/Ninho, starts them as this user on its ports, sees them in the port list, and stops them.
+      - name: Smoke test (Linux, system servers)
+        if: runner.os == 'Linux'
+        run: |
+          set -x
+          B=$PWD/target/${{ matrix.target }}/release/ninho
+          sudo apt-get install -y -qq redis-server > /dev/null
+          sudo systemctl stop redis-server || true
+          mkdir -p ~/Ninho/www && echo '<?php echo "ninho-" . "ok";' > ~/Ninho/www/index.php
+          $B --install php redis postgres mysql mailpit
+          cat ~/Ninho/tmp/ninho-install.log
+          ls -la ~/Ninho/bin/*/*
+          $B start php redis postgres mailpit
+          $B status --json | tee status.json
+          curl -fsS http://localhost:8000/ | grep ninho-ok
+          for id in php redis postgres; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="running"' status.json; done
+          # Informational: MySQL under Ubuntu's AppArmor profile, and Mailpit downloaded from GitHub.
+          $B start mysql || true
+          $B status
+          tail -n 15 ~/Ninho/data/mysql-*/mysqld.log || true
+          $B stop php redis postgres mailpit mysql
+          $B status --json | tee after.json
+          for id in php redis postgres; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="stopped"' after.json; done
