@@ -86,6 +86,24 @@ pub fn find(ninho_root: &Path) -> Vec<Found> {
     scan(ninho_root, &places)
 }
 
+/// One folder the person points at (an install that is not in the usual places): which of the three it is is read from
+/// its own files, then the same detection as `find` runs. It is only read. None when it is Ninho itself or holds
+/// neither a web root nor a database server.
+pub fn find_in(ninho_root: &Path, dir: &Path) -> Option<Found> {
+    if !dir.is_dir() || norm(dir) == norm(ninho_root) {
+        return None;
+    }
+    let has = |f: &str| dir.join(f).exists();
+    let order = if has("htdocs") || has(r"mysql\bin") {
+        [Kind::Xampp, Kind::Laragon, Kind::Wamp]
+    } else if has("wampmanager.exe") || has("wampmanager.conf") {
+        [Kind::Wamp, Kind::Laragon, Kind::Xampp]
+    } else {
+        [Kind::Laragon, Kind::Wamp, Kind::Xampp]
+    };
+    order.into_iter().find_map(|k| inspect(k, dir))
+}
+
 /// `find` over given places (the tests use a fake tree).
 fn scan(ninho_root: &Path, places: &[(Kind, PathBuf)]) -> Vec<Found> {
     let own = norm(ninho_root);
@@ -640,6 +658,23 @@ mod tests {
         for n in ["mysqld.exe", "mysqldump.exe", "mysql.exe", "mysqladmin.exe"] {
             touch(&bin.join(n));
         }
+    }
+
+    #[test]
+    fn finds_one_folder_the_person_points_at() {
+        let base = tmp("find-in");
+        let x = base.join("meu-xampp");
+        fs::create_dir_all(x.join(r"htdocs\loja")).unwrap();
+        fake_bin(&x.join(r"mysql\bin"));
+        let f = find_in(&base.join("ninho"), &x).expect("a XAMPP-like folder");
+        assert_eq!(f.kind, Kind::Xampp);
+        assert_eq!(f.sites, vec!["loja".to_string()]);
+        // Ninho itself and a folder with nothing to bring over are not installs.
+        assert!(find_in(&x, &x).is_none());
+        let empty = base.join("vazia");
+        fs::create_dir_all(&empty).unwrap();
+        assert!(find_in(&base.join("ninho"), &empty).is_none());
+        assert!(find_in(&base.join("ninho"), &base.join("nao-existe")).is_none());
     }
 
     #[test]

@@ -77,7 +77,7 @@ fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Ninho")
         .with_inner_size([1000.0, 660.0])
-        .with_min_inner_size([860.0, 560.0]);
+        .with_min_inner_size([1000.0, 640.0]);
     if let Ok(img) = image::load_from_memory(include_bytes!("../assets/ninho-256.png")) {
         let img = img.to_rgba8();
         viewport = viewport.with_icon(std::sync::Arc::new(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() }));

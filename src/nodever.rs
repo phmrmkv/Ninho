@@ -30,6 +30,12 @@ fn major(v: &str) -> u32 {
     ver_key(v).first().copied().unwrap_or(0)
 }
 
+/// "26.0.0-rc.1", "25.0.0-nightly2026...", "-alpha", "-beta": not offered, only releases.
+pub fn is_prerelease(v: &str) -> bool {
+    let low = v.to_ascii_lowercase();
+    low.contains('-') || ["alpha", "beta", "rc", "nightly"].iter().any(|w| low.contains(w))
+}
+
 // ---------- what exists on nodejs.org ----------
 
 /// Newest release of each LTS line plus the newest "Current" (the first entry), from index.json text:
@@ -43,6 +49,9 @@ fn parse_index(text: &[u8]) -> Result<Vec<(String, String, bool)>, String> {
         .filter(|r| r["files"].as_array().is_some_and(|f| f.iter().any(|x| x.as_str() == Some(format!("{ARCH}-zip").as_str()))))
         .filter_map(|r| {
             let ver = r["version"].as_str()?.trim_start_matches('v').to_string();
+            if is_prerelease(&ver) {
+                return None;
+            }
             Some((ver, r["lts"].as_str().unwrap_or("").to_string()))
         })
         .collect();
@@ -243,6 +252,16 @@ pub fn set_for_project(dir: &Path, version: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pre_releases_are_not_offered() {
+        for v in ["26.0.0-rc.1", "26.0.0-beta.2", "25.0.0-alpha.3", "26.1.0-nightly20261101"] {
+            assert!(is_prerelease(v), "{v}");
+        }
+        for v in ["26.13.1", "24.11.0"] {
+            assert!(!is_prerelease(v), "{v}");
+        }
+    }
 
     const INDEX: &str = r#"[
       {"version":"v25.2.0","date":"2026-11-01","files":["win-x64-zip","linux-x64"],"lts":false},

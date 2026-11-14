@@ -143,6 +143,8 @@ pub struct Shared {
     pub installing: Mutex<HashMap<String, String>>,
     /// Newest stable version of each tool on its official site (tool → version, or why it could not be read).
     pub latest: Mutex<HashMap<String, Result<String, String>>>,
+    /// Tools a download just installed ("redis"...): the window turns their server on in Modules.
+    pub just_installed: Mutex<Vec<String>>,
 }
 
 impl Shared {
@@ -157,6 +159,7 @@ impl Shared {
             listeners: Mutex::new(Vec::new()),
             installing: Mutex::new(HashMap::new()),
             latest: Mutex::new(HashMap::new()),
+            just_installed: Mutex::new(Vec::new()),
         })
     }
 

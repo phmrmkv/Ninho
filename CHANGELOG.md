@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.2 — 2026-11-13
+- A UX review of every screen: nothing cut off at the smallest window size, the same words for the same action, no exclamation marks, buttons all in the same three sizes.
+- Preferences: services and ports explained, with headers, readable ports, short version numbers and a Download button where nothing is installed; a theme choice; folder pickers.
+- A server you download now shows up in Modules at once.
+- Clicks a few pixels outside a button still count; the window X is bigger.
+- Ports: filter, a Test button, "End program" with a clear confirmation, Ninho servers stopped the normal way.
+- Download and update: Redis and PHP no longer offered again when already up to date.
+- Databases: whole rows, search past 10 databases, Show more for backups.
+- Logs: centered, copy button, 12 px text. Disabled buttons say why.
+
 ## 0.6.1 — 2026-11-13
 - Faster: the folders of programs and sites are read once a second instead of on every mouse move, so clicks answer at once (a frame went from about 9 ms to under 1 ms).
 - Windows and messages can be dragged aside to read what is behind them.

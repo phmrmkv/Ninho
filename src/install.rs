@@ -95,6 +95,31 @@ pub fn ver_key(v: &str) -> Vec<u32> {
     v.split(|c: char| !c.is_ascii_digit()).filter(|p| !p.is_empty()).filter_map(|p| p.parse().ok()).collect()
 }
 
+/// The version inside a folder name: "mysql-8.4.3-winx64" → "8.4.3", "node-v26.13.1-win-x64" → "26.13.1",
+/// "php-8.5.12-1-Win32-vs17-x64" → "8.5.12", "redis-x64-5.0.14.1" → "5.0.14.1" (the first dotted number between dashes,
+/// so the "64" of "x64" is not taken for the version).
+pub fn short_ver(folder: &str) -> String {
+    let dotted = folder
+        .split(['-', '_', ' '])
+        .map(|p| p.strip_prefix(['v', 'V']).unwrap_or(p))
+        .find(|p| p.starts_with(|c: char| c.is_ascii_digit()) && p.contains('.') && p.chars().all(|c| c.is_ascii_digit() || c == '.'));
+    if let Some(v) = dotted {
+        return v.trim_end_matches('.').to_string();
+    }
+    let start = folder.find(|c: char| c.is_ascii_digit()).unwrap_or(0);
+    let v: String = folder[start..].chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    if v.is_empty() { folder.to_string() } else { v.trim_end_matches('.').to_string() }
+}
+
+/// Is one of the installed version folders as new as `latest` (the version the official site announces)?
+/// The folder names carry more than the version ("redis-x64-5.0.14.1", "php-8.5.12-1-Win32-vs17-x64"), so the
+/// numeric version is taken out of each one first.
+pub fn is_up_to_date(have: &[String], latest: &str) -> bool {
+    // The site may announce a build too ("8.5.12-1" for PHP): only the version counts.
+    let want = ver_key(&short_ver(latest));
+    !want.is_empty() && have.iter().any(|h| ver_key(&short_ver(h)) >= want)
+}
+
 fn php_latest() -> Result<Latest, String> {
     let v = json("https://windows.php.net/downloads/releases/releases.json")?;
     let obj = v.as_object().ok_or("releases.json")?;
@@ -406,10 +431,45 @@ pub fn install(shared: Arc<Shared>, s: Settings, tool: String, id: String) {
     match run() {
         Ok((version, vdir)) => {
             finish(&shared, &s, &tool, &kind_dir, &vdir);
+            shared.just_installed.lock().unwrap().push(tool.clone());
             shared.say(format!("{name} {version}: {} {}", tr(lang, "log_installed_in"), vdir.display()));
         }
         Err(e) => shared.say(format!("{name}: {e}")),
     }
     shared.installing.lock().unwrap().remove(&id);
     shared.refresh();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn have(names: &[&str]) -> Vec<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn version_out_of_a_folder_name() {
+        assert_eq!(short_ver("redis-x64-5.0.14.1"), "5.0.14.1");
+        assert_eq!(short_ver("php-8.5.12-1-Win32-vs17-x64"), "8.5.12");
+        assert_eq!(short_ver("mysql-8.4.3-winx64"), "8.4.3");
+        assert_eq!(short_ver("node-v26.13.1-win-x64"), "26.13.1");
+        assert_eq!(short_ver("httpd-2.4.71-261112-Win64-VS18"), "2.4.71");
+        assert_eq!(short_ver("postgresql-18.1"), "18.1");
+        assert_eq!(short_ver("1.27.0"), "1.27.0");
+    }
+
+    #[test]
+    fn installed_folder_counts_as_the_announced_version() {
+        assert!(is_up_to_date(&have(&["redis-x64-5.0.14.1"]), "5.0.14.1"));
+        assert!(is_up_to_date(&have(&["php-8.5.12-1-Win32-vs17-x64"]), "8.5.12"));
+        assert!(is_up_to_date(&have(&["php-8.5.12-1-Win32-vs17-x64"]), "8.5.12-1"));
+        assert!(is_up_to_date(&have(&["mysql-8.4.3-winx64"]), "8.4.3"));
+        assert!(is_up_to_date(&have(&["httpd-2.4.71-261112-Win64-VS18"]), "2.4.71"));
+        // An older folder is not enough, a newer one is.
+        assert!(!is_up_to_date(&have(&["php-8.5.11-1-Win32-vs17-x64"]), "8.5.12"));
+        assert!(!is_up_to_date(&have(&["mysql-8.4.2-winx64"]), "8.4.3"));
+        assert!(is_up_to_date(&have(&["php-8.4.1-Win32-vs17-x64", "php-8.5.12-1-Win32-vs17-x64"]), "8.5.12"));
+        assert!(!is_up_to_date(&[], "8.5.12"));
+    }
 }

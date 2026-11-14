@@ -200,6 +200,12 @@ pub struct NinhoApp {
     /// "Quit" from the menu or the tray: really close instead of hiding in the tray.
     quitting: bool,
     hidden_note: bool,
+    /// Folder chosen in Windows' folder dialog (which field asked, the folder), and whether a dialog is open.
+    folder_pick: Arc<std::sync::Mutex<Option<(String, PathBuf)>>>,
+    picking: Arc<AtomicBool>,
+    /// Ports tab: the filter text, and the port last tested (Some(None) = what was typed is not a port).
+    port_filter: String,
+    port_tested: Option<Option<u16>>,
 }
 
 /// Live log viewer: the end of a log file, read again every second while the window is open.
@@ -224,6 +230,9 @@ struct DbWin {
     busy: Arc<std::sync::Mutex<String>>,
     import_db: String,
     confirm: Option<(PathBuf, String)>,
+    /// Search text (shown with more than 10 databases) and how many backups the list shows (0 = the first 10).
+    search: String,
+    snap_shown: usize,
 }
 
 /// First free port from `from` upwards that no server here uses either.
@@ -314,6 +323,10 @@ impl NinhoApp {
             wl_pick: vec![("apache", true), ("php", true), ("mysql", true), ("nodejs", false), ("mailpit", false)],
             quitting: false,
             hidden_note: false,
+            folder_pick: Arc::new(std::sync::Mutex::new(None)),
+            picking: Arc::new(AtomicBool::new(false)),
+            port_filter: String::new(),
+            port_tested: None,
         };
         // NINHO_TAB=updates opens the "Download and update" window (used by the screenshot check).
         let mut app = app;
@@ -325,6 +338,20 @@ impl NinhoApp {
         }
         if std::env::var("NINHO_TAB").as_deref() == Ok("project") {
             app.show_project = true;
+        }
+        // NINHO_TAB=prefs | prefs-services | db | dbtools | new | node | import opens that window (screenshot check).
+        match std::env::var("NINHO_TAB").as_deref() {
+            Ok("prefs") => app.open_prefs(),
+            Ok("prefs-services") => {
+                app.open_prefs();
+                app.prefs_tab = 1;
+            }
+            Ok("db") => app.show_db = true,
+            Ok("dbtools") => app.open_db_tools("mysql"),
+            Ok("new") => app.open_new(),
+            Ok("node") => app.open_node_win(),
+            Ok("import") => app.open_import(),
+            _ => {}
         }
         if std::env::var("NINHO_TAB").as_deref() == Ok("health") {
             app.run_health();
@@ -664,7 +691,9 @@ impl NinhoApp {
                     }
                     ui.add_space(6.0);
                     ui.vertical(|ui| {
-                        ui.add_space(9.0);
+                        // Title and tagline close together, the pair centered in the bar.
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        ui.add_space(10.0);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("Ninho").size(21.0).strong().color(fg()));
                             ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).size(12.5).color(muted()));
@@ -728,6 +757,58 @@ impl NinhoApp {
         r.clicked()
     }
 
+    /// "Choose folder…" next to a folder field: Windows' folder dialog on a thread; the answer is put in the field named by
+    /// \`tag\` (see apply_folder_pick).
+    fn folder_button(&self, ui: &mut egui::Ui, tag: &str, start: &str) {
+        self.folder_button_with(ui, tag, start, "choose_folder");
+    }
+
+    fn folder_button_with(&self, ui: &mut egui::Ui, tag: &str, start: &str, key: &str) {
+        let busy = self.picking.load(Ordering::SeqCst);
+        if ui.add_enabled(!busy, button(self.t(key), Tone::Neutral, CONTROL_SM)).clicked() {
+            pick_folder(self.folder_pick.clone(), self.picking.clone(), tag, start, ui.ctx().clone());
+        }
+    }
+
+    /// The folder the dialog returned goes where it was asked for.
+    fn apply_folder_pick(&mut self) {
+        let Some((tag, p)) = self.folder_pick.lock().unwrap().take() else { return };
+        let mut path = p.to_string_lossy().to_string();
+        if path.len() > 3 {
+            path = path.trim_end_matches(['\\', '/']).to_string();
+        }
+        match tag.as_str() {
+            "wl_root" => self.wl_root = path,
+            "root" => self.draft.root = path,
+            "doc_root" => self.draft.doc_root = path,
+            "nn_dir" => self.nn_dir = path,
+            "imp" => match crate::importer::find_in(Path::new(&self.s.root), &p) {
+                Some(f) => {
+                    if !self.imp_found.iter().any(|x| x.root == f.root) {
+                        self.imp_found.push(f);
+                    }
+                }
+                None => self.shared.say(format!("{}: {}", p.display(), self.t("import_none_here"))),
+            },
+            _ => {}
+        }
+    }
+
+    /// "site", "sites" (and the third form Polish, Russian and Ukrainian need) for a count.
+    fn sites_word(&self, n: usize) -> &'static str {
+        let code = self.s.language.code();
+        let slavic = matches!(code, "pl" | "ru" | "uk");
+        let (m10, m100) = (n % 10, n % 100);
+        let key = if n == 1 || (slavic && code != "pl" && m10 == 1 && m100 != 11) {
+            "sites_count_one"
+        } else if slavic && !((2..=4).contains(&m10) && !(12..=14).contains(&m100)) {
+            "sites_count_many"
+        } else {
+            "sites_count"
+        };
+        self.t(key)
+    }
+
     fn side_btn<'a>(&self, ui: &egui::Ui, text: &str) -> egui::Button<'a> {
         button(text, Tone::Neutral, CONTROL).min_size(vec2(ui.available_width(), CONTROL))
     }
@@ -747,9 +828,8 @@ impl NinhoApp {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 let running = self.any_running();
-                let (label, fill) = if running { (self.t("stop_all"), bad()) } else { (self.t("start_all"), accent()) };
+                let label = if running { self.t("stop_all") } else { self.t("start_all") };
                 let big = button(label, if running { Tone::Danger } else { Tone::Primary }, CONTROL_LG).min_size(vec2(ui.available_width(), CONTROL_LG));
-                let _ = fill;
                 if ui.add(big).clicked() {
                     if running { self.stop_all() } else { self.start_all() }
                 }
@@ -762,7 +842,10 @@ impl NinhoApp {
                         self.go_tab(i);
                     }
                 }
-                ui.add_space(4.0);
+                // The views above, the actions below.
+                ui.add_space(2.0);
+                ui.separator();
+                ui.add_space(2.0);
                 if self.side_button(ui, "updates") {
                     self.show_updates = true;
                     self.check_updates();
@@ -775,16 +858,13 @@ impl NinhoApp {
                 }
                 ui.add_space(4.0);
                 egui::containers::menu::MenuButton::from_button(self.side_btn(ui, &format!("{} >", self.t("more")))).ui(ui, |ui| {
-                    ui.set_min_width(230.0);
+                    ui.set_min_width(260.0);
+                    // Databases.
                     if ui.button(self.t("create_db")).clicked() {
                         self.db_name.clear();
                         self.db_err = None;
                         self.db_target = "mysql".into();
                         self.show_db = true;
-                        ui.close();
-                    }
-                    if ui.button(self.t("new_server")).clicked() {
-                        self.open_new();
                         ui.close();
                     }
                     if ui.button(self.t("db_tools")).clicked() {
@@ -795,10 +875,10 @@ impl NinhoApp {
                         self.open_import();
                         ui.close();
                     }
-                    if ui.button(self.t("check_update")).clicked() {
-                        let ctx = ui.ctx().clone();
-                        *self.upd_msg.lock().unwrap() = Some(self.t("update_checking").to_string());
-                        self.check_update(&ctx, true);
+                    ui.separator();
+                    // Tools.
+                    if ui.button(self.t("new_server")).clicked() {
+                        self.open_new();
                         ui.close();
                     }
                     if ui.button(self.t("health")).clicked() {
@@ -813,6 +893,14 @@ impl NinhoApp {
                         open(&Path::new(&self.s.root).join("tmp").to_string_lossy());
                         ui.close();
                     }
+                    ui.separator();
+                    // Ninho itself.
+                    if ui.button(self.t("check_update")).clicked() {
+                        let ctx = ui.ctx().clone();
+                        *self.upd_msg.lock().unwrap() = Some(self.t("update_checking").to_string());
+                        self.check_update(&ctx, true);
+                        ui.close();
+                    }
                 });
                 ui.add_space(4.0);
                 if self.side_button(ui, "preferences") {
@@ -824,7 +912,7 @@ impl NinhoApp {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                     let n = sites::list(&self.s).len();
-                    ui.label(RichText::new(format!("{n} {} · {}", self.t("sites_count"), self.s.doc_root)).size(12.0).color(muted()));
+                    ui.label(RichText::new(format!("{n} {} · {}", self.sites_word(n), self.s.doc_root)).size(12.0).color(muted()));
                 });
             });
     }
@@ -844,11 +932,11 @@ impl NinhoApp {
                     for line in log.iter().rev().take(200).rev() {
                         let (time, msg) = line.split_at(line.len().min(8));
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(time).font(FontId::monospace(11.5)).color(Color32::from_rgb(0x7f, 0x95, 0x9e)));
+                            ui.label(RichText::new(time).font(FontId::monospace(12.0)).color(Color32::from_rgb(0x7f, 0x95, 0x9e)));
                             let low = msg.to_lowercase();
                             let (sad, glad) = crate::i18n::moods(lang);
                             let col = if low.contains("could not") || low.contains("failed") || low.contains("in use") || sad.iter().any(|w| low.contains(w.as_str())) { Color32::from_rgb(0xff, 0x9b, 0x8f) } else if low.contains("started") || low.contains("installed") || glad.iter().any(|w| low.contains(w.as_str())) { Color32::from_rgb(0x8f, 0xe3, 0xa5) } else { Color32::from_rgb(0xe6, 0xee, 0xf0) };
-                            ui.label(RichText::new(msg.trim_start()).font(FontId::monospace(11.5)).color(col));
+                            ui.label(RichText::new(msg.trim_start()).font(FontId::monospace(12.0)).color(col));
                         });
                     }
                 });
@@ -892,8 +980,18 @@ impl NinhoApp {
 
     fn modules_table(&mut self, ui: &mut egui::Ui) {
         let ids: Vec<String> = self.s.services.iter().filter(|c| c.enabled).map(|c| c.id.clone()).collect();
+        if ids.is_empty() {
+            ui.add_space(12.0);
+            ui.label(RichText::new(self.t("no_modules")).color(muted()));
+            ui.add_space(4.0);
+            if ui.add(button(self.t("choose_servers"), Tone::Primary, CONTROL)).clicked() {
+                self.open_prefs();
+                self.prefs_tab = 1;
+            }
+            return;
+        }
         let mut action: Option<(String, &'static str)> = None;
-        egui::ScrollArea::vertical().id_salt("mods").max_height((ui.available_height() - 60.0).max(120.0)).show(ui, |ui| {
+        egui::ScrollArea::both().id_salt("mods").auto_shrink([false, true]).max_height((ui.available_height() - 60.0).max(120.0)).show(ui, |ui| {
             egui::Grid::new("mods").num_columns(4).striped(true).spacing([14.0, 6.0]).min_row_height(40.0).show(ui, |ui| {
                 for h in ["module", "pids", "ports_col", "actions"] {
                     ui.label(RichText::new(self.t(h)).strong().size(12.0).color(muted()));
@@ -921,6 +1019,7 @@ impl NinhoApp {
                                 ui.label(RichText::new(c.title()).strong().size(14.0).color(fg()));
                                 let sub = match (&installing, &version) {
                                     (Some(m), _) => format!("{} {m}", self.t("installing")),
+                                    (None, Some(v)) if st == State::Stopped => format!("{} · {}", short_ver(v), self.t("stopped")),
                                     (None, Some(v)) => short_ver(v),
                                     (None, None) => self.t("not_installed").into(),
                                 };
@@ -944,7 +1043,7 @@ impl NinhoApp {
                     }
                     ui.label(RichText::new(ports_txt).monospace().size(12.0).color(if st == State::Foreign { bad() } else { fg() }));
                     ui.horizontal(|ui| {
-                        let small = |t: &str, tone: Tone| button(t, tone, CONTROL_SM).min_size(vec2(92.0, CONTROL_SM));
+                        let small = |t: &str, tone: Tone| button(t, tone, CONTROL_SM).min_size(vec2(84.0, CONTROL_SM));
                         if version.is_none() {
                             let label = if installing.is_some() { self.t("working") } else if install::page(&c.key).is_some() { self.t("download") } else { self.t("install") };
                             if named(ui.add_enabled(installing.is_none(), small(label, Tone::Primary)), format!("{label} {}", c.title())).clicked() {
@@ -962,13 +1061,15 @@ impl NinhoApp {
                             }
                         }
                         let can_admin = st == State::Running && matches!(c.key.as_str(), "apache" | "nginx" | "mysql" | "mariadb" | "postgres" | "php" | "mailpit" | "redis");
-                        if named(ui.add_enabled(can_admin, small(self.t("admin"), Tone::Neutral)).on_hover_text(self.t("admin_hint")), format!("{} {}", self.t("admin"), c.title())).clicked() {
+                        let adm = ui.add_enabled(can_admin, small(self.t("admin"), Tone::Neutral)).on_hover_text(self.t("admin_hint"));
+                        let adm = if st == State::Running { adm } else { adm.on_disabled_hover_text(self.t("admin_off_hint")) };
+                        if named(adm, format!("{} {}", self.t("admin"), c.title())).clicked() {
                             action = Some((id.clone(), "admin"));
                         }
                         let (cfg_btn, _) = egui::containers::menu::MenuButton::from_button(small(self.t("config"), Tone::Neutral)).ui(ui, |ui| self.config_menu(ui, id));
                         named(cfg_btn, format!("{} {}", self.t("config"), c.title()));
                         let log = services::log_file(&self.s, id);
-                        if named(ui.add_enabled(log.is_some(), small(self.t("logs"), Tone::Neutral)), format!("{} {}", self.t("logs"), c.title())).clicked() {
+                        if named(ui.add_enabled(log.is_some(), small(self.t("logs"), Tone::Neutral)).on_disabled_hover_text(self.t("no_log_yet")), format!("{} {}", self.t("logs"), c.title())).clicked() {
                             if let Some(f) = log {
                                 self.log_win = LogWin { open: true, title: c.title(), file: f, ..Default::default() };
                             }
@@ -1203,10 +1304,10 @@ impl NinhoApp {
             ui.label(RichText::new(self.t("sites")).size(16.0).strong().color(fg()));
             ui.label(RichText::new(format!("{} · {}", list.len(), self.s.doc_root)).size(12.0).color(muted()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.button(self.t("reload")).clicked() {
+                if ui.add(button(self.t("reload"), Tone::Neutral, CONTROL_SM)).clicked() {
                     self.reload();
                 }
-                if ui.button(format!("+ {}", self.t("quick_app"))).clicked() {
+                if ui.add(button(format!("+ {}", self.t("quick_app")), Tone::Neutral, CONTROL_SM)).clicked() {
                     self.np_name.clear();
                     self.np_err = None;
                     self.show_project = true;
@@ -1216,7 +1317,14 @@ impl NinhoApp {
         ui.label(RichText::new(if apache_on { self.t("sites_hint_on") } else { self.t("sites_hint_off") }).size(12.0).color(muted()));
         ui.add_space(6.0);
         if list.is_empty() {
-            ui.label(RichText::new(self.t("no_sites")).color(muted()));
+            ui.add_space(8.0);
+            ui.label(RichText::new(fill(self.t("no_sites"), &[("doc_root", &self.s.doc_root)])).color(muted()));
+            ui.add_space(4.0);
+            if ui.add(button(self.t("create_project"), Tone::Primary, CONTROL)).clicked() {
+                self.np_name.clear();
+                self.np_err = None;
+                self.show_project = true;
+            }
             return;
         }
         let mut action: Option<(String, &'static str)> = None;
@@ -1255,17 +1363,20 @@ impl NinhoApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        let shown = if cfg.php.is_empty() { services::version_label(&self.s, "php").map(|v| short_ver(&v)).unwrap_or_else(|| "—".into()) } else { short_ver(&cfg.php) };
-                        egui::ComboBox::from_id_salt(format!("php-{}", site.folder)).width(84.0).selected_text(format!("PHP {shown}")).show_ui(ui, |ui| {
-                            if ui.selectable_label(cfg.php.is_empty(), self.t("same_as_module")).clicked() {
-                                set_php = Some((site.folder.clone(), String::new()));
-                            }
-                            for v in php_versions.iter().rev() {
-                                if ui.selectable_label(cfg.php == *v, short_ver(v)).clicked() {
-                                    set_php = Some((site.folder.clone(), v.clone()));
+                        // A Node.js project has no PHP version to pick.
+                        if kind != "Node.js" {
+                            let shown = if cfg.php.is_empty() { services::version_label(&self.s, "php").map(|v| short_ver(&v)).unwrap_or_else(|| "—".into()) } else { short_ver(&cfg.php) };
+                            egui::ComboBox::from_id_salt(format!("php-{}", site.folder)).width(84.0).selected_text(format!("PHP {shown}")).show_ui(ui, |ui| {
+                                if ui.selectable_label(cfg.php.is_empty(), self.t("same_as_module")).clicked() {
+                                    set_php = Some((site.folder.clone(), String::new()));
                                 }
-                            }
-                        });
+                                for v in php_versions.iter().rev() {
+                                    if ui.selectable_label(cfg.php == *v, short_ver(v)).clicked() {
+                                        set_php = Some((site.folder.clone(), v.clone()));
+                                    }
+                                }
+                            });
+                        }
                         let b = if serving { button(self.t("unserve"), Tone::Neutral, CONTROL_SM) } else { button(self.t("serve"), Tone::Primary, CONTROL_SM) }.min_size(vec2(132.0, CONTROL_SM));
                         let serve_label = format!("{} {}", if serving { self.t("unserve") } else { self.t("serve") }, site.folder);
                         if named(ui.add_enabled(!php_versions.is_empty(), b).on_hover_text(format!("{} {}", self.t("serve_hint"), cfg.port)), serve_label).clicked() {
@@ -1324,7 +1435,7 @@ impl NinhoApp {
                                     if ui.link(RichText::new(u).size(12.5)).clicked() {
                                         open(u);
                                     }
-                                    if ui.small_button(self.t("copy")).clicked() {
+                                    if ui.add(button(self.t("copy"), Tone::Neutral, CONTROL_SM)).clicked() {
                                         ui.ctx().copy_text(u.clone());
                                     }
                                     // QR code to open the link on a phone.
@@ -1472,7 +1583,7 @@ impl NinhoApp {
         let mut open = self.health_win;
         let list = self.health.lock().unwrap().clone();
         let mut again = false;
-        egui::Window::new(self.t("health")).open(&mut open).resizable(true).default_size(vec2(640.0, 480.0)).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
+        egui::Window::new(self.t("health")).open(&mut open).collapsible(false).resizable(true).default_size(vec2(640.0, 480.0)).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             match &list {
                 None => {
                     ui.horizontal(|ui| {
@@ -1485,7 +1596,7 @@ impl NinhoApp {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(format!("  {n_err} {}  ", self.t("h_errors"))).strong().color(bad()).background_color(bad_soft()));
                         ui.label(RichText::new(format!("  {n_warn} {}  ", self.t("h_warnings"))).strong().color(amber()).background_color(amber_soft()));
-                        ui.label(RichText::new(format!("  {n_ok} {}  ", self.t("log_done"))).strong().color(ok()).background_color(ok_soft()));
+                        ui.label(RichText::new(format!("  {n_ok} {}  ", self.t("h_ok"))).strong().color(ok()).background_color(ok_soft()));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui.add(button(self.t("check_again"), Tone::Neutral, CONTROL_SM)).clicked() {
                                 again = true;
@@ -1500,7 +1611,7 @@ impl NinhoApp {
                             let (mark, col, soft) = match f.level {
                                 health::Level::Error => (self.t("h_error"), bad(), bad_soft()),
                                 health::Level::Warn => (self.t("h_warning"), amber(), amber_soft()),
-                                health::Level::Ok => ("OK", ok(), ok_soft()),
+                                health::Level::Ok => (self.t("h_ok_tag"), ok(), ok_soft()),
                             };
                             egui::Frame::NONE.fill(surface()).stroke(Stroke::new(1.0, line())).corner_radius(CornerRadius::same(RADIUS)).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
                                 ui.set_width(ui.available_width());
@@ -1547,7 +1658,10 @@ impl NinhoApp {
                 }
                 ui.end_row();
                 ui.label(self.t("welcome_folder"));
-                ui.add(egui::TextEdit::singleline(&mut self.wl_root).desired_width(300.0));
+                ui.horizontal(|ui| {
+                    ui.add_sized([240.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.wl_root));
+                    self.folder_button(ui, "wl_root", &self.wl_root.clone());
+                });
                 ui.end_row();
             });
             ui.label(RichText::new(self.t("welcome_folder_hint")).size(12.0).color(muted()));
@@ -1742,6 +1856,8 @@ impl NinhoApp {
             ui.add_space(6.0);
             if self.imp_found.is_empty() {
                 ui.label(RichText::new(self.t("import_none")).color(muted()));
+                ui.add_space(4.0);
+                self.folder_button_with(ui, "imp", "", "look_elsewhere");
             }
             for (i, f) in self.imp_found.iter().enumerate() {
                 ui.separator();
@@ -1759,18 +1875,21 @@ impl NinhoApp {
                     });
                 });
             }
-            if need_pass {
+            // The passwords are only asked when there is something to import.
+            if !self.imp_found.is_empty() {
+                if need_pass {
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.label(self.t("import_password"));
+                        ui.add(egui::TextEdit::singleline(&mut self.imp_pass).password(true).desired_width(200.0));
+                    });
+                }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.label(self.t("import_password"));
-                    ui.add(egui::TextEdit::singleline(&mut self.imp_pass).password(true).desired_width(200.0));
+                    ui.label(self.t("import_ninho_password"));
+                    ui.add(egui::TextEdit::singleline(&mut self.db_pw).password(true).desired_width(200.0));
                 });
             }
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(self.t("import_ninho_password"));
-                ui.add(egui::TextEdit::singleline(&mut self.db_pw).password(true).desired_width(200.0));
-            });
             let pending = self.imp_pending.lock().unwrap().clone();
             if let Some((dump, _, clash)) = pending {
                 ui.add_space(6.0);
@@ -1877,6 +1996,7 @@ impl NinhoApp {
         let have = nodever::installed(&self.s);
         egui::Window::new(self.t("node_more")).open(&mut open).collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.label(RichText::new(self.t("node_hint")).size(12.0).color(muted()));
+            ui.label(RichText::new(self.t("lts_hint")).size(12.0).color(muted()));
             ui.add_space(6.0);
             match list {
                 None => {
@@ -1886,17 +2006,17 @@ impl NinhoApp {
                     ui.colored_label(bad(), e);
                 }
                 Some(Ok(vs)) => {
-                    egui::Grid::new("nodevers").num_columns(3).striped(true).spacing([14.0, 8.0]).show(ui, |ui| {
-                        for (v, lts, cur) in vs {
+                    egui::Grid::new("nodevers").num_columns(3).striped(true).spacing([14.0, 8.0]).min_row_height(CONTROL_SM).show(ui, |ui| {
+                        for (v, lts, cur) in vs.into_iter().filter(|(v, _, _)| !nodever::is_prerelease(v)) {
                             ui.label(RichText::new(format!("Node.js {v}")).strong().color(fg()));
                             let tag = if !lts.is_empty() { format!("LTS {lts}") } else if cur { "Current".into() } else { String::new() };
                             ui.label(RichText::new(tag).size(12.0).color(muted()));
                             let busy = self.shared.installing.lock().unwrap().get(&format!("node-{v}")).cloned();
                             if have.contains(&v) {
-                                ui.label(RichText::new(self.t("up_to_date")).size(12.5).color(ok()));
+                                ui.label(RichText::new(self.t("node_installed")).size(12.5).color(ok()));
                             } else if let Some(m) = busy {
                                 ui.label(RichText::new(format!("{} {m}", self.t("installing"))).size(12.5).color(amber()));
-                            } else if ui.add(button(self.t("download_install"), Tone::Primary, CONTROL_SM).min_size(vec2(92.0, CONTROL_SM))).clicked() {
+                            } else if ui.add(button(self.t("install"), Tone::Primary, CONTROL_SM).min_size(vec2(92.0, CONTROL_SM))).clicked() {
                                 let (s, shared, v2) = (self.s.clone(), self.shared.clone(), v.clone());
                                 std::thread::spawn(move || {
                                     match nodever::install(&s, &shared, &v2) {
@@ -1999,29 +2119,41 @@ impl NinhoApp {
             ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
         let mut open = w.open;
-        let title = format!("{} — {}", self.log_win.title, tr(self.s.language, "logs"));
-        let (filter_hint, open_label, lines_label) = (tr(self.s.language, "filter"), tr(self.s.language, "open_notepad"), tr(self.s.language, "lines"));
+        let title = fill(tr(self.s.language, "log_title"), &[("name", &self.log_win.title)]);
+        let (filter_hint, open_label, lines_label, copy_label) = (tr(self.s.language, "filter"), tr(self.s.language, "open_notepad"), tr(self.s.language, "lines"), tr(self.s.language, "copy"));
         let w = &mut self.log_win;
-        egui::Window::new(title).open(&mut open).resizable(true).default_size(vec2(760.0, 440.0)).show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut w.filter).hint_text(filter_hint).desired_width(220.0));
-                if ui.button(open_label).clicked() {
-                    open_text(&w.file);
-                }
-                ui.label(RichText::new(w.file.to_string_lossy()).size(12.0).color(muted()));
+        egui::Window::new(title)
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size(vec2(760.0, 440.0))
+            .pivot(egui::Align2::CENTER_CENTER)
+            .default_pos(ctx.content_rect().center())
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_sized([220.0, CONTROL_SM], egui::TextEdit::singleline(&mut w.filter).hint_text(filter_hint));
+                    if ui.add(button(open_label, Tone::Neutral, CONTROL_SM)).clicked() {
+                        open_text(&w.file);
+                    }
+                    ui.label(RichText::new(w.file.to_string_lossy()).size(12.0).color(muted()));
+                });
+                let f = w.filter.to_lowercase();
+                let lines: Vec<&str> = w.text.lines().filter(|l| f.is_empty() || l.to_lowercase().contains(&f)).collect();
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{} {lines_label}", lines.len())).size(12.0).color(muted()));
+                    if ui.add(button(copy_label, Tone::Neutral, CONTROL_SM)).clicked() {
+                        ui.ctx().copy_text(lines.join("\n"));
+                    }
+                });
+                egui::ScrollArea::both().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    for l in lines.iter().rev().take(2000).rev() {
+                        let low = l.to_lowercase();
+                        let col = if low.contains("error") || low.contains("fatal") { bad() } else if low.contains("warn") { amber() } else { fg() };
+                        ui.label(RichText::new(*l).font(FontId::monospace(12.0)).color(col));
+                    }
+                });
             });
-            let f = w.filter.to_lowercase();
-            let lines: Vec<&str> = w.text.lines().filter(|l| f.is_empty() || l.to_lowercase().contains(&f)).collect();
-            ui.label(RichText::new(format!("{} {lines_label}", lines.len())).size(12.0).color(muted()));
-            egui::ScrollArea::both().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
-                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                for l in lines.iter().rev().take(2000).rev() {
-                    let low = l.to_lowercase();
-                    let col = if low.contains("error") || low.contains("fatal") { bad() } else if low.contains("warn") { amber() } else { fg() };
-                    ui.label(RichText::new(*l).font(FontId::monospace(11.5)).color(col));
-                }
-            });
-        });
         self.log_win.open = open;
     }
 
@@ -2029,6 +2161,8 @@ impl NinhoApp {
         self.db.open = true;
         self.db.target = id.to_string();
         self.db.confirm = None;
+        self.db.search.clear();
+        self.db.snap_shown = 10;
         self.load_dbs();
     }
 
@@ -2060,11 +2194,13 @@ impl NinhoApp {
         let id = self.db.target.clone();
         let running = self.shared.state(&id) == State::Running;
         let busy = self.db.busy.lock().unwrap().clone();
+        // Lists are as tall as whole rows (a button row plus the gap), so no row is ever cut in half.
+        let rows_h = |n: usize| n as f32 * CONTROL_SM + (n.saturating_sub(1)) as f32 * 8.0;
         egui::Window::new(self.t("db_tools"))
             .open(&mut shown_win)
             .collapsible(false)
             .resizable(true)
-            .default_size(vec2(620.0, 460.0))
+            .default_size(vec2(640.0, 520.0))
             .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -2079,8 +2215,9 @@ impl NinhoApp {
                         }
                     });
                     ui.label(self.t("db_password"));
-                    ui.add(egui::TextEdit::singleline(&mut self.db.password).password(true).desired_width(120.0));
-                    if ui.button(self.t("refresh")).clicked() {
+                    let hint = self.t("db_password_empty");
+                    ui.add_sized([190.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.db.password).password(true).hint_text(hint));
+                    if ui.add(button(self.t("refresh"), Tone::Neutral, CONTROL_SM)).clicked() {
                         self.load_dbs();
                     }
                     if let Some(i) = pick {
@@ -2095,9 +2232,22 @@ impl NinhoApp {
                     ui.label(RichText::new(format!("{} {busy}", self.t("working"))).color(amber()));
                 }
                 ui.separator();
-                ui.label(RichText::new(self.t("databases")).strong().color(fg()));
                 let list = self.db.list.lock().unwrap().clone();
-                egui::ScrollArea::vertical().id_salt("dblist").max_height(150.0).show(ui, |ui| match list {
+                let total = match &list {
+                    Some(Ok(d)) => d.len(),
+                    _ => 0,
+                };
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(self.t("databases")).strong().color(fg()));
+                    // More than 10 databases: a search field.
+                    if total > 10 {
+                        let hint = self.t("filter");
+                        ui.add_sized([200.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.db.search).hint_text(hint));
+                    }
+                });
+                let query = if total > 10 { self.db.search.trim().to_lowercase() } else { String::new() };
+                let vis = if total > 4 { egui::scroll_area::ScrollBarVisibility::AlwaysVisible } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded };
+                egui::ScrollArea::vertical().id_salt("dblist").max_height(rows_h(4)).scroll_bar_visibility(vis).show(ui, |ui| match list {
                     None => {
                         ui.label(RichText::new(self.t("checking")).color(muted()));
                     }
@@ -2108,10 +2258,11 @@ impl NinhoApp {
                         if dbs.is_empty() {
                             ui.label(RichText::new(self.t("no_databases")).color(muted()));
                         }
-                        for db in dbs {
+                        for db in dbs.iter().filter(|d| query.is_empty() || d.to_lowercase().contains(&query)) {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(&db).monospace().color(fg()));
-                                if ui.add_enabled(busy.is_empty() && running, egui::Button::new(self.t("backup"))).clicked() {
+                                ui.set_min_height(CONTROL_SM);
+                                ui.label(RichText::new(db).monospace().color(fg()));
+                                if ui.add_enabled(busy.is_empty() && running, button(self.t("backup"), Tone::Neutral, CONTROL_SM)).clicked() {
                                     let (s, id2, pw, db2) = (self.s.clone(), id.clone(), self.db.password.clone(), db.clone());
                                     let word = self.t("backup");
                                     self.db_job(format!("{word} {db}"), move || dbtools::backup(&s, &id2, &db2, &pw).map(|f| format!("{word} {db2}: {}", f.display())));
@@ -2123,33 +2274,43 @@ impl NinhoApp {
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(self.t("snapshots")).strong().color(fg()));
-                    if ui.small_button(self.t("folder")).clicked() {
+                    if ui.add(button(self.t("explore"), Tone::Neutral, CONTROL_SM)).clicked() {
                         let dir = Path::new(&self.s.root).join("backups").join(&id);
                         let _ = std::fs::create_dir_all(&dir);
                         open(&dir.to_string_lossy());
                     }
                 });
                 let snaps = dbtools::snapshots(&self.s, &id);
-                egui::ScrollArea::vertical().id_salt("snaps").max_height(140.0).show(ui, |ui| {
+                let shown_n = self.db.snap_shown.max(10);
+                let vis = if snaps.len() > 4 { egui::scroll_area::ScrollBarVisibility::AlwaysVisible } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded };
+                egui::ScrollArea::vertical().id_salt("snaps").max_height(rows_h(4)).scroll_bar_visibility(vis).show(ui, |ui| {
                     if snaps.is_empty() {
                         ui.label(RichText::new(self.t("no_snapshots")).color(muted()));
                     }
-                    for sn in snaps.iter().take(30) {
+                    for sn in snaps.iter().take(shown_n) {
                         ui.horizontal(|ui| {
+                            ui.set_min_height(CONTROL_SM);
                             ui.label(RichText::new(format!("{}  ·  {}  ·  {:.1} MB", sn.database, sn.when, sn.bytes as f64 / 1_048_576.0)).monospace().size(12.0).color(fg()));
-                            if ui.add_enabled(busy.is_empty() && running, egui::Button::new(self.t("restore"))).clicked() {
+                            if ui.add_enabled(busy.is_empty() && running, button(self.t("restore"), Tone::Neutral, CONTROL_SM)).clicked() {
                                 self.db.confirm = Some((sn.file.clone(), sn.database.clone()));
                             }
                         });
+                    }
+                    if snaps.len() > shown_n && ui.add(button(self.t("show_more"), Tone::Neutral, CONTROL_SM)).clicked() {
+                        self.db.snap_shown = shown_n + 10;
                     }
                 });
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label(self.t("import_into"));
                     let hint = self.t("db_name");
-                    ui.add(egui::TextEdit::singleline(&mut self.db.import_db).hint_text(hint).desired_width(140.0));
-                    let ok = busy.is_empty() && running && name_ok(self.db.import_db.trim());
-                    if ui.add_enabled(ok, egui::Button::new(self.t("import_sql"))).clicked() {
+                    ui.add_sized([160.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.db.import_db).hint_text(hint));
+                    let name_good = name_ok(self.db.import_db.trim());
+                    let can = busy.is_empty() && running && name_good;
+                    let why = if !name_good { self.t("import_need_db").to_string() } else if !running { format!("{} {}", self.t("start_first"), self.s.svc(&id).title()) } else { String::new() };
+                    let b = ui.add_enabled(can, button(self.t("import_sql"), Tone::Neutral, CONTROL_SM));
+                    let b = if why.is_empty() { b } else { b.on_disabled_hover_text(why) };
+                    if b.clicked() {
                         if let Some(file) = pick_sql_file() {
                             let (s, id2, pw, db2) = (self.s.clone(), id.clone(), self.db.password.clone(), self.db.import_db.trim().to_string());
                             let word = self.t("log_import");
@@ -2172,7 +2333,7 @@ impl NinhoApp {
                         self.db_job(format!("{word} {db}"), move || dbtools::restore(&s, &id2, &f2, &db2, &pw).map(|_| format!("{word} {db2}: {ok}")));
                         keep = false;
                     }
-                    if ui.button(self.t("cancel")).clicked() {
+                    if ui.add(button(self.t("cancel"), Tone::Neutral, CONTROL)).clicked() {
                         keep = false;
                     }
                 });
@@ -2291,68 +2452,101 @@ impl NinhoApp {
     /// Every port something listens on in this PC, plus the ports of this app's servers that are free.
     fn ports_view(&mut self, ui: &mut egui::Ui) {
         let list = self.shared.listeners.lock().unwrap().clone();
-        // Port → (server name, its program), to say "Ninho: MySQL" only when that program is really the one listening.
-        let mine: std::collections::HashMap<u16, (String, String)> = self.s.services.iter().map(|c| (c.port, (c.title(), services::image(&c.key)))).collect();
+        // Port → (server id, server name, its program), to say "Ninho: MySQL" only when that program is really the one listening.
+        let mine: std::collections::HashMap<u16, (String, String, String)> = self.s.services.iter().map(|c| (c.port, (c.id.clone(), c.title(), services::image(&c.key)))).collect();
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{} {}", list.len(), self.t("ports_in_use"))).strong().color(fg()));
             ui.add_space(8.0);
             let label = self.t("only_local");
             ui.checkbox(&mut self.only_local, label);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.button(self.t("refresh")).clicked() {
+                if ui.add(button(self.t("refresh"), Tone::Neutral, CONTROL_SM)).clicked() {
                     let shared = self.shared.clone();
                     std::thread::spawn(move || shared.refresh());
                 }
-                let test = self.port_test.trim().parse::<u16>().ok();
-                if let Some(p) = test {
+            });
+        });
+        ui.horizontal(|ui| {
+            let hint = self.t("ports_filter");
+            ui.add_sized([260.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.port_filter).hint_text(hint));
+            ui.add_space(12.0);
+            let hint = self.t("test_port");
+            let r = ui.add_sized([150.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.port_test).hint_text(hint));
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if ui.add(button(self.t("test_go"), Tone::Neutral, CONTROL_SM)).clicked() || enter {
+                self.port_tested = Some(self.port_test.trim().parse::<u16>().ok());
+            }
+            match self.port_tested {
+                Some(Some(p)) => {
                     let (txt, col) = match ports::owner(&list, p) {
                         Some(l) => (format!("{p}: {} {} (PID {})", self.t("taken_by"), l.program, l.pid), bad()),
                         None => (format!("{p}: {}", self.t("free")), ok()),
                     };
                     ui.label(RichText::new(txt).size(12.5).color(col));
                 }
-                let hint = self.t("test_port");
-                ui.add(egui::TextEdit::singleline(&mut self.port_test).hint_text(hint).desired_width(90.0));
-            });
+                Some(None) => {
+                    ui.label(RichText::new(self.t("bad_port")).size(12.5).color(bad()));
+                }
+                None => {}
+            }
         });
         ui.add_space(6.0);
-        let shown: Vec<&ports::Listener> = list
+        let query = self.port_filter.trim().to_lowercase();
+        // One row per listener: what it is, and the server of Ninho that owns it (its stop button is the normal stop).
+        let rows: Vec<(&ports::Listener, String, Option<String>)> = list
             .iter()
             .filter(|l| !self.only_local || l.addrs.iter().all(|a| a.starts_with("127.") || a == "[::1]"))
+            .map(|l| match mine.get(&l.port) {
+                Some((id, t, img)) if l.program.to_ascii_lowercase() == *img => (l, format!("Ninho: {t}"), Some(id.clone())),
+                Some((_, t, _)) => (l, format!("{} {t}", self.t("blocks")), None),
+                None if ports::is_system(&l.program, l.pid) => (l, "Windows".to_string(), None),
+                None => (l, ports::hint(l.port).to_string(), None),
+            })
+            .filter(|(l, who, _)| query.is_empty() || l.port.to_string().contains(&query) || l.program.to_lowercase().contains(&query) || who.to_lowercase().contains(&query))
             .collect();
-        egui::ScrollArea::vertical().id_salt("ports").max_height((ui.available_height() - 26.0).max(100.0)).show(ui, |ui| {
-            egui::Grid::new("portgrid").num_columns(6).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+        let mut stop_module: Option<String> = None;
+        egui::ScrollArea::both().id_salt("ports").auto_shrink([false, false]).max_height((ui.available_height() - 26.0).max(100.0)).show(ui, |ui| {
+            egui::Grid::new("portgrid").num_columns(6).striped(true).spacing([14.0, 4.0]).min_row_height(CONTROL_SM + 4.0).show(ui, |ui| {
                 for h in ["port", "program", "pid", "who", "reach", ""] {
-                    ui.label(RichText::new(if h.is_empty() { "" } else { self.t(h) }).strong().size(12.5).color(muted()));
+                    let r = ui.label(RichText::new(if h.is_empty() { "" } else { self.t(h) }).strong().size(12.5).color(muted()));
+                    if h == "reach" {
+                        r.on_hover_text(self.t("reach_hint"));
+                    }
                 }
                 ui.end_row();
-                for l in &shown {
+                for (l, who, ninho_id) in &rows {
                     ui.label(RichText::new(l.port.to_string()).strong().color(fg()));
                     ui.label(RichText::new(if l.program.is_empty() { "?" } else { &l.program }).color(fg()));
                     ui.label(RichText::new(l.pid.to_string()).color(muted()));
-                    let who = match mine.get(&l.port) {
-                        Some((t, img)) if l.program.to_ascii_lowercase() == *img => format!("Ninho: {t}"),
-                        Some((t, _)) => format!("{} {t}", self.t("blocks")),
-                        None if ports::is_system(&l.program, l.pid) => "Windows".to_string(),
-                        None => ports::hint(l.port).to_string(),
-                    };
-                    ui.label(RichText::new(who).color(brand()));
+                    let col = if ninho_id.is_some() { ok() } else if who == "Windows" { muted() } else if who.starts_with(self.t("blocks")) { amber() } else { fg() };
+                    ui.label(RichText::new(who).color(col));
                     let local = l.addrs.iter().all(|a| a.starts_with("127.") || a == "[::1]");
                     ui.label(RichText::new(if local { self.t("this_pc") } else { self.t("network") }).size(12.0).color(muted()))
                         .on_hover_text(l.addrs.join("  "));
                     ui.horizontal(|ui| {
-                        if ports::hint(l.port) != "Windows" && named(ui.small_button(self.t("open")), format!("{} {}", self.t("open"), l.port)).clicked() {
+                        if ports::hint(l.port) != "Windows" && named(ui.add(button(self.t("open"), Tone::Neutral, CONTROL_SM)), format!("{} {}", self.t("open"), l.port)).clicked() {
                             open(&format!("http://localhost:{}", l.port));
                         }
                         // Windows' own programs can not be stopped from here.
-                        if !ports::is_system(&l.program, l.pid) && named(ui.small_button(self.t("stop")), format!("{} {} {}", self.t("stop"), l.program, l.port)).clicked() {
-                            self.confirm_kill = Some((*l).clone());
+                        if !ports::is_system(&l.program, l.pid) {
+                            if let Some(id) = ninho_id {
+                                // A server of Ninho: the normal stop, not a kill.
+                                if named(ui.add(button(self.t("stop"), Tone::Neutral, CONTROL_SM)), format!("{} {who}", self.t("stop"))).clicked() {
+                                    stop_module = Some(id.clone());
+                                }
+                            } else if named(ui.add(button(self.t("stop_program"), Tone::Danger, CONTROL_SM)), format!("{} {} {}", self.t("stop_program"), l.program, l.port)).clicked() {
+                                self.confirm_kill = Some((*l).clone());
+                            }
                         }
                     });
                     ui.end_row();
                 }
             });
         });
+        if let Some(id) = stop_module {
+            let (shared, s) = (self.shared.clone(), self.s.clone());
+            std::thread::spawn(move || services::stop(&shared, &s, &id));
+        }
         ui.add_space(6.0);
         let free: Vec<String> = self
             .s
@@ -2391,10 +2585,10 @@ impl NinhoApp {
                         ui.label(RichText::new(if have.is_empty() { self.t("not_installed").to_string() } else { have.join("\n") }).size(12.0).color(muted()));
                         match &latest {
                             None => ui.label(RichText::new(self.t("checking")).size(12.5).color(muted())),
-                            Some(Ok(v)) => ui.label(RichText::new(v).strong().color(brand())),
+                            Some(Ok(v)) => ui.label(RichText::new(short_ver(v)).strong().color(brand())),
                             Some(Err(e)) => ui.label(RichText::new(self.t("offline")).size(12.5).color(bad())).on_hover_text(e),
                         };
-                        let up_to_date = matches!(&latest, Some(Ok(v)) if have.iter().any(|h| install::ver_key(h).starts_with(&install::ver_key(v))));
+                        let up_to_date = matches!(&latest, Some(Ok(v)) if install::is_up_to_date(&have, v));
                         if let Some(m) = busy {
                             ui.label(RichText::new(format!("{} {m}", self.t("installing"))).size(12.5).color(amber()));
                         } else if up_to_date {
@@ -2410,9 +2604,9 @@ impl NinhoApp {
                 });
                 ui.add_space(6.0);
                 ui.label(RichText::new(self.t("mysql_lts_hint")).size(12.0).color(muted()));
-                ui.label(RichText::new(format!("Apache, Nginx, Memcached: {}", self.t("by_hand"))).size(12.0).color(muted()));
+                ui.label(RichText::new(format!("Nginx, Memcached: {}", self.t("by_hand"))).size(12.0).color(muted()));
                 ui.add_space(4.0);
-                if ui.button(self.t("refresh")).clicked() {
+                if ui.add(button(self.t("check_new_versions"), Tone::Neutral, CONTROL_SM)).clicked() {
                     self.check_updates();
                 }
             });
@@ -2427,11 +2621,11 @@ impl NinhoApp {
             .resizable(false)
             .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
-                ui.label(format!("{} {} (PID {}) — {} {}", self.t("stop_question"), l.program, l.pid, self.t("port"), l.port));
-                ui.label(RichText::new(self.t("stop_warning")).size(12.0).color(muted()));
+                let exe = if l.program.is_empty() { "?" } else { l.program.as_str() };
+                ui.label(fill(self.t("end_text"), &[("exe", exe), ("pid", &l.pid.to_string()), ("port", &l.port.to_string())]));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    let b = button(self.t("stop"), Tone::Danger, CONTROL);
+                    let b = button(self.t("end_go"), Tone::Danger, CONTROL);
                     if ui.add(b).clicked() {
                         match ports::kill(l.pid) {
                             Ok(()) => self.shared.say(format!("{} {} (PID {})", self.t("stopped_program"), l.program, l.pid)),
@@ -2441,7 +2635,7 @@ impl NinhoApp {
                         std::thread::spawn(move || shared.refresh());
                         keep = false;
                     }
-                    if ui.button(self.t("cancel")).clicked() {
+                    if ui.add(button(self.t("cancel"), Tone::Neutral, CONTROL)).clicked() {
                         keep = false;
                     }
                 });
@@ -2454,6 +2648,7 @@ impl NinhoApp {
     fn new_window(&mut self, ctx: &egui::Context) {
         let mut open = self.show_new;
         let mut go = false;
+        let mut cancel = false;
         egui::Window::new(self.t("new_server"))
             .open(&mut open)
             .collapsible(false)
@@ -2482,7 +2677,10 @@ impl NinhoApp {
                     ui.end_row();
                     if self.nn_kind == "mysql" || self.nn_kind == "php" {
                         ui.label(self.t(if self.nn_kind == "mysql" { "data_folder" } else { "site_folder" }));
-                        ui.add(egui::TextEdit::singleline(&mut self.nn_dir).desired_width(280.0));
+                        ui.horizontal(|ui| {
+                            ui.add_sized([240.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.nn_dir));
+                            self.folder_button(ui, "nn_dir", &self.nn_dir.clone());
+                        });
                         ui.end_row();
                     }
                 });
@@ -2496,11 +2694,16 @@ impl NinhoApp {
                     ui.colored_label(bad(), e);
                 }
                 ui.add_space(6.0);
-                if ui.button(self.t("create")).clicked() {
-                    go = true;
-                }
+                ui.horizontal(|ui| {
+                    if ui.add(button(self.t("create_server_go"), Tone::Primary, CONTROL)).clicked() {
+                        go = true;
+                    }
+                    if ui.add(button(self.t("cancel"), Tone::Neutral, CONTROL)).clicked() {
+                        cancel = true;
+                    }
+                });
             });
-        self.show_new = open;
+        self.show_new = open && !cancel;
         if go {
             self.create_server();
         }
@@ -2511,65 +2714,93 @@ impl NinhoApp {
         let lang = self.draft.language;
         let mut save = false;
         let mut cancel = false;
+        let mut to_updates = false;
+        // The tabs scroll when the window is short; Save and Cancel stay below, always visible.
+        let scroll_h = (ctx.content_rect().height() - 220.0).max(160.0);
         egui::Window::new(tr(lang, "preferences"))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(460.0)
+            .default_width(560.0)
             .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.prefs_tab, 0, tr(lang, "general"));
-                    ui.selectable_value(&mut self.prefs_tab, 1, tr(lang, "services_ports"));
+                    for (i, key) in [(0u8, "general"), (1u8, "services_ports")] {
+                        let on = self.prefs_tab == i;
+                        if toggle_named(ui.add(button(tr(lang, key), if on { Tone::Nav } else { Tone::Neutral }, CONTROL_SM)), tr(lang, key), on).clicked() {
+                            self.prefs_tab = i;
+                        }
+                    }
                 });
                 ui.separator();
                 if self.prefs_tab == 0 {
-                    egui::Grid::new("general").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                        ui.label(tr(lang, "language"));
-                        egui::ComboBox::from_id_salt("lang").selected_text(self.draft.language.label()).show_ui(ui, |ui| {
-                            for l in Lang::all() {
-                                ui.selectable_value(&mut self.draft.language, l, l.label());
-                            }
+                    egui::ScrollArea::vertical().id_salt("prefs-general").max_height(scroll_h).auto_shrink([false, true]).show(ui, |ui| {
+                        egui::Grid::new("general").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+                            ui.label(tr(lang, "language"));
+                            egui::ComboBox::from_id_salt("lang").selected_text(self.draft.language.label()).show_ui(ui, |ui| {
+                                for l in Lang::all() {
+                                    ui.selectable_value(&mut self.draft.language, l, l.label());
+                                }
+                            });
+                            ui.end_row();
+                            ui.label(tr(lang, "install_root"));
+                            ui.horizontal(|ui| {
+                                ui.add_sized([260.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.draft.root));
+                                self.folder_button(ui, "root", &self.draft.root.clone());
+                            });
+                            ui.end_row();
+                            ui.label(tr(lang, "doc_root"));
+                            ui.horizontal(|ui| {
+                                ui.add_sized([260.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.draft.doc_root));
+                                self.folder_button(ui, "doc_root", &self.draft.doc_root.clone());
+                            });
+                            ui.end_row();
+                            ui.label(tr(lang, "hostname"));
+                            ui.add_sized([160.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.draft.hostname_format));
+                            ui.end_row();
+                            ui.label(tr(lang, "theme"));
+                            ui.horizontal(|ui| {
+                                for (value, key) in [("light", "theme_light"), ("dark", "theme_dark"), ("system", "theme_system")] {
+                                    let on = self.draft.theme == value;
+                                    if toggle_named(ui.add(button(tr(lang, key), if on { Tone::Nav } else { Tone::Neutral }, CONTROL_SM)), tr(lang, key), on).clicked() {
+                                        self.draft.theme = value.into();
+                                    }
+                                }
+                            });
+                            ui.end_row();
                         });
-                        ui.end_row();
-                        ui.label(tr(lang, "install_root"));
-                        ui.add(egui::TextEdit::singleline(&mut self.draft.root).desired_width(280.0));
-                        ui.end_row();
-                        ui.label(tr(lang, "doc_root"));
-                        ui.add(egui::TextEdit::singleline(&mut self.draft.doc_root).desired_width(280.0));
-                        ui.end_row();
-                        ui.label(tr(lang, "hostname"));
-                        ui.add(egui::TextEdit::singleline(&mut self.draft.hostname_format).desired_width(160.0));
-                        ui.end_row();
-                    });
-                    ui.label(RichText::new(tr(lang, "hostname_hint")).size(12.0).color(muted()));
-                    ui.add_space(6.0);
-                    ui.checkbox(&mut self.draft.auto_vhosts, tr(lang, "auto_vhosts"));
-                    ui.checkbox(&mut self.draft.start_all_on_launch, tr(lang, "start_all_auto"));
-                    ui.checkbox(&mut self.draft.run_at_startup, tr(lang, "run_at_startup"));
-                    ui.checkbox(&mut self.draft.close_to_tray, tr(lang, "close_to_tray"));
-                    ui.checkbox(&mut self.draft.start_hidden, tr(lang, "start_hidden"));
-                    ui.checkbox(&mut self.draft.check_updates, tr(lang, "check_updates"));
-                    ui.separator();
-                    // Portable or installed: one exe either way.
-                    if crate::selfinstall::is_installed_copy() {
-                        ui.label(RichText::new(format!("{} {}", tr(lang, "installed_at"), crate::selfinstall::install_dir().display())).size(12.5).color(muted()));
-                        ui.label(RichText::new(tr(lang, "uninstall_hint")).size(12.0).color(muted()));
-                    } else {
-                        ui.label(RichText::new(tr(lang, "portable_now")).size(12.5).color(muted()));
-                        let label = if crate::selfinstall::installed() { tr(lang, "update_install") } else { tr(lang, "install_app") };
-                        if ui.add(button(label, Tone::Neutral, CONTROL)).on_hover_text(tr(lang, "install_app_hint")).clicked() {
-                            match crate::selfinstall::install(env!("CARGO_PKG_VERSION")) {
-                                Ok(exe) => self.shared.say(format!("{} {}", tr(lang, "install_app_done"), exe.display())),
-                                Err(e) => self.shared.say(format!("{} {e}", tr(lang, "install_app_failed"))),
+                        ui.label(RichText::new(tr(lang, "hostname_hint")).size(12.0).color(muted()));
+                        ui.add_space(6.0);
+                        ui.checkbox(&mut self.draft.auto_vhosts, tr(lang, "auto_vhosts"));
+                        ui.label(RichText::new(tr(lang, "hosts_note")).size(12.0).color(muted()));
+                        ui.checkbox(&mut self.draft.start_all_on_launch, tr(lang, "start_all_auto"));
+                        ui.checkbox(&mut self.draft.run_at_startup, tr(lang, "run_at_startup"));
+                        ui.checkbox(&mut self.draft.close_to_tray, tr(lang, "close_to_tray"));
+                        ui.checkbox(&mut self.draft.start_hidden, tr(lang, "start_hidden"));
+                        ui.checkbox(&mut self.draft.check_updates, tr(lang, "check_updates"));
+                        ui.separator();
+                        // Portable or installed: one exe either way.
+                        if crate::selfinstall::is_installed_copy() {
+                            ui.label(RichText::new(format!("{} {}", tr(lang, "installed_at"), crate::selfinstall::install_dir().display())).size(12.5).color(muted()));
+                            ui.label(RichText::new(tr(lang, "uninstall_hint")).size(12.0).color(muted()));
+                        } else {
+                            ui.label(RichText::new(tr(lang, "portable_now")).size(12.5).color(muted()));
+                            let label = if crate::selfinstall::installed() { tr(lang, "update_install") } else { tr(lang, "install_app") };
+                            if ui.add(button(label, Tone::Neutral, CONTROL)).on_hover_text(tr(lang, "install_app_hint")).clicked() {
+                                match crate::selfinstall::install(env!("CARGO_PKG_VERSION")) {
+                                    Ok(exe) => self.shared.say(format!("{} {}", tr(lang, "install_app_done"), exe.display())),
+                                    Err(e) => self.shared.say(format!("{} {e}", tr(lang, "install_app_failed"))),
+                                }
                             }
                         }
-                    }
+                    });
                 } else {
-                    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-                        egui::Grid::new("svc").num_columns(4).spacing([12.0, 8.0]).show(ui, |ui| {
-                            ui.label(RichText::new(tr(lang, "enabled")).strong());
-                            ui.label("");
+                    ui.label(RichText::new(tr(lang, "services_hint")).size(12.5).color(muted()));
+                    ui.add_space(4.0);
+                    egui::ScrollArea::vertical().id_salt("prefs-services").max_height(scroll_h).auto_shrink([false, true]).show(ui, |ui| {
+                        egui::Grid::new("svc").num_columns(4).spacing([14.0, 8.0]).show(ui, |ui| {
+                            ui.label(RichText::new(tr(lang, "in_modules")).strong()).on_hover_text(tr(lang, "in_modules_hint"));
+                            ui.label(RichText::new(tr(lang, "server")).strong());
                             ui.label(RichText::new(tr(lang, "port")).strong());
                             ui.label(RichText::new(tr(lang, "version")).strong());
                             ui.end_row();
@@ -2577,20 +2808,25 @@ impl NinhoApp {
                             for i in 0..self.draft.services.len() {
                                 let cfg = &mut self.draft.services[i];
                                 let d = services::def(&cfg.key);
-                                ui.checkbox(&mut cfg.enabled, "");
-                                ui.label(cfg.title());
-                                ui.add(egui::TextEdit::singleline(&mut self.port_text[i]).desired_width(64.0));
+                                let title = cfg.title();
+                                let tip = format!("{} {title}", tr(lang, "in_modules_hint"));
+                                named(ui.checkbox(&mut cfg.enabled, ""), title.clone()).on_hover_text(tip);
+                                ui.label(title.clone());
+                                named(ui.add_sized([76.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.port_text[i]).font(egui::TextStyle::Monospace)), format!("{} {title}", tr(lang, "port")));
                                 let vs = services::versions(&root, d);
-                                let shown = if cfg.version.is_empty() {
-                                    vs.last().cloned().unwrap_or_else(|| tr(lang, "not_installed").into())
-                                } else {
-                                    cfg.version.clone()
-                                };
-                                egui::ComboBox::from_id_salt(format!("v-{}", cfg.id)).width(220.0).selected_text(shown).show_ui(ui, |ui| {
-                                    for v in vs.iter().rev() {
-                                        ui.selectable_value(&mut cfg.version, v.clone(), v);
+                                if vs.is_empty() {
+                                    // Nothing installed: a way to get it, not an empty list.
+                                    if ui.add(button(tr(lang, "download"), Tone::Neutral, CONTROL_SM)).on_hover_text(tr(lang, "not_installed")).clicked() {
+                                        to_updates = true;
                                     }
-                                });
+                                } else {
+                                    let current = if cfg.version.is_empty() { vs.last().cloned().unwrap_or_default() } else { cfg.version.clone() };
+                                    egui::ComboBox::from_id_salt(format!("v-{}", cfg.id)).width(200.0).selected_text(short_ver(&current)).show_ui(ui, |ui| {
+                                        for v in vs.iter().rev() {
+                                            ui.selectable_value(&mut cfg.version, v.clone(), short_ver(v)).on_hover_text(v);
+                                        }
+                                    });
+                                }
                                 ui.end_row();
                             }
                         });
@@ -2602,15 +2838,19 @@ impl NinhoApp {
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.button(tr(lang, "save")).clicked() {
+                    if ui.add(button(tr(lang, "save"), Tone::Primary, CONTROL)).clicked() {
                         save = true;
                     }
-                    if ui.button(tr(lang, "cancel")).clicked() {
+                    if ui.add(button(tr(lang, "cancel"), Tone::Neutral, CONTROL)).clicked() {
                         cancel = true;
                     }
                 });
             });
         self.show_prefs = open && !cancel;
+        if to_updates {
+            self.show_updates = true;
+            self.check_updates();
+        }
         if save {
             self.save_prefs();
         }
@@ -2658,7 +2898,10 @@ impl NinhoApp {
                 let label = self.t("auto_db");
                 ui.checkbox(&mut self.np_db, label);
                 let host = sites::hostname(&self.s.hostname_format, if self.np_name.is_empty() { "…" } else { self.np_name.trim() });
-                ui.label(RichText::new(format!("{} http://{host}", self.t("address"))).color(brand()));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(self.t("your_site_at")).color(muted()));
+                    ui.label(RichText::new(format!("http://{host}")).color(fg()));
+                });
                 ui.label(RichText::new(self.t("own_templates")).size(12.0).color(muted()));
                 if let Some(e) = &self.np_err {
                     ui.colored_label(bad(), e);
@@ -2691,6 +2934,7 @@ impl NinhoApp {
     fn db_window(&mut self, ctx: &egui::Context) {
         let mut open = self.show_db;
         let mut go = false;
+        let mut cancel = false;
         let mysqls: Vec<(String, String)> = self.s.services.iter().filter(|c| c.key == "mysql").map(|c| (c.id.clone(), format!("{} ({} {})", c.title(), self.t("port"), c.port))).collect();
         egui::Window::new(self.t("create_db"))
             .open(&mut open)
@@ -2710,21 +2954,28 @@ impl NinhoApp {
                         ui.end_row();
                     }
                     ui.label(self.t("db_name"));
-                    ui.add(egui::TextEdit::singleline(&mut self.db_name).desired_width(200.0));
+                    ui.add_sized([220.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.db_name));
                     ui.end_row();
                     ui.label(self.t("db_password"));
-                    ui.add(egui::TextEdit::singleline(&mut self.db_pw).password(true).desired_width(200.0));
+                    let hint = self.t("db_password_empty");
+                    ui.add_sized([220.0, CONTROL_SM], egui::TextEdit::singleline(&mut self.db_pw).password(true).hint_text(hint));
                     ui.end_row();
                 });
+                ui.label(RichText::new(self.t("db_password_hint")).size(12.0).color(muted()));
                 if let Some(e) = &self.db_err {
                     ui.colored_label(bad(), e);
                 }
                 ui.add_space(6.0);
-                if ui.button(self.t("create")).clicked() {
-                    go = true;
-                }
+                ui.horizontal(|ui| {
+                    if ui.add(button(self.t("create_db_go"), Tone::Primary, CONTROL)).clicked() {
+                        go = true;
+                    }
+                    if ui.add(button(self.t("cancel"), Tone::Neutral, CONTROL)).clicked() {
+                        cancel = true;
+                    }
+                });
             });
-        self.show_db = open;
+        self.show_db = open && !cancel;
         if go {
             self.create_db();
         }
@@ -2862,6 +3113,7 @@ impl eframe::App for NinhoApp {
             self.styled = true;
         }
         self.screenshot_step(&ctx);
+        self.apply_folder_pick();
         self.tray_step(&ctx);
         if self.show_req.swap(false, Ordering::SeqCst) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
@@ -2881,7 +3133,7 @@ impl eframe::App for NinhoApp {
         if let Some(text) = note {
             let mut open = true;
             let mut ok = false;
-            egui::Window::new("Ninho").id(egui::Id::unique("upd-note")).open(&mut open).collapsible(false).resizable(false).default_width(380.0).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(&ctx, |ui| {
+            egui::Window::new(self.t("update_note_title")).id(egui::Id::unique("upd-note")).open(&mut open).collapsible(false).resizable(false).default_width(380.0).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(&ctx, |ui| {
                 ui.horizontal(|ui| {
                     if text == self.t("update_checking") {
                         ui.spinner();
@@ -2889,7 +3141,7 @@ impl eframe::App for NinhoApp {
                     ui.label(RichText::new(&text).color(fg()));
                 });
                 ui.add_space(6.0);
-                if ui.add(button("OK", Tone::Primary, CONTROL)).clicked() {
+                if ui.add(button(self.t("got_it"), Tone::Primary, CONTROL)).clicked() {
                     ok = true;
                 }
             });
@@ -2949,6 +3201,21 @@ impl eframe::App for NinhoApp {
         self.kill_window(&ctx);
         self.keyboard_step(&ctx);
         self.pop_step(&ctx);
+        // A server that was just downloaded shows up in Modules right away (it was easy to miss it unticked).
+        let fresh: Vec<String> = std::mem::take(&mut *self.shared.just_installed.lock().unwrap());
+        let mut turned_on = Vec::new();
+        for key in fresh {
+            if !self.s.services.iter().any(|c| c.key == key && c.enabled) {
+                if let Some(c) = self.s.services.iter_mut().find(|c| c.key == key) {
+                    c.enabled = true;
+                    turned_on.push(c.title());
+                }
+            }
+        }
+        if !turned_on.is_empty() {
+            self.save();
+            self.shared.say(format!("{} {}", self.t("now_in_modules"), turned_on.join(", ")));
+        }
         // NINHO_PROFILE=1: time of each frame goes to tmp\ninho-profile.log (ms), to find what makes clicks feel slow.
         if std::env::var_os("NINHO_PROFILE").is_some() {
             let ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -3015,6 +3282,8 @@ fn style(ctx: &egui::Context) {
     v.widgets.active.bg_stroke = Stroke::new(2.0, brand());
     v.widgets.open.weak_bg_fill = surface2();
     v.window_corner_radius = CornerRadius::same(12);
+    // A disabled button stays readable: text on a faded light button needs more than half opacity to keep 3:1.
+    v.disabled_alpha = if dark() { 0.5 } else { 0.7 };
     v.menu_corner_radius = CornerRadius::same(RADIUS);
     for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
         w.corner_radius = CornerRadius::same(RADIUS);
@@ -3024,6 +3293,10 @@ fn style(ctx: &egui::Context) {
         st.spacing.item_spacing = vec2(8.0, 8.0);
         st.spacing.button_padding = vec2(12.0, 6.0);
         st.spacing.interact_size.y = CONTROL_SM;
+        // A click a few pixels outside a button still counts (egui's default is 5), and the window X is bigger.
+        st.interaction.interact_radius = 10.0;
+        st.spacing.icon_width = 18.0;
+        st.spacing.icon_width_inner = 10.0;
         st.text_styles.insert(egui::TextStyle::Body, FontId::proportional(14.0));
         st.text_styles.insert(egui::TextStyle::Button, FontId::proportional(14.0));
         st.text_styles.insert(egui::TextStyle::Small, FontId::proportional(12.0));
@@ -3040,9 +3313,37 @@ fn load_logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
 
 /// "mysql-8.4.3-winx64" → "8.4.3", "node-v26.13.1-win-x64" → "26.13.1", "php-8.5.12-1-Win32-vs17-x64" → "8.5.12".
 fn short_ver(folder: &str) -> String {
-    let start = folder.find(|c: char| c.is_ascii_digit()).unwrap_or(0);
-    let v: String = folder[start..].chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
-    if v.is_empty() { folder.to_string() } else { v.trim_end_matches('.').to_string() }
+    install::short_ver(folder)
+}
+
+/// A text with {placeholders} filled in ("{exe}", "{port}"...).
+fn fill(text: &str, pairs: &[(&str, &str)]) -> String {
+    let mut s = text.to_string();
+    for (k, v) in pairs {
+        s = s.replace(&format!("{{{k}}}"), v);
+    }
+    s
+}
+
+/// Windows' own "choose a folder" dialog, on a thread so the window does not freeze. The folder lands in \`slot\` with
+/// the \`tag\` of the field that asked for it; \`busy\` is true while the dialog is open.
+fn pick_folder(slot: Arc<std::sync::Mutex<Option<(String, PathBuf)>>>, busy: Arc<AtomicBool>, tag: &str, start: &str, ctx: egui::Context) {
+    busy.store(true, Ordering::SeqCst);
+    let (tag, start) = (tag.to_string(), start.replace('\'', "''"));
+    std::thread::spawn(move || {
+        let ps = format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.SelectedPath = '{start}'; $d.ShowNewFolderButton = $true; if ($d.ShowDialog() -eq 'OK') {{ $d.SelectedPath }}");
+        let mut c = std::process::Command::new("powershell");
+        c.args(["-NoProfile", "-STA", "-Command", &ps]);
+        services::hide_window(&mut c);
+        if let Ok(out) = c.output() {
+            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !p.is_empty() {
+                *slot.lock().unwrap() = Some((tag, PathBuf::from(p)));
+            }
+        }
+        busy.store(false, Ordering::SeqCst);
+        ctx.request_repaint();
+    });
 }
 
 /// A text file (config, log) in Notepad.

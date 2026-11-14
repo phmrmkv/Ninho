@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: Phmrmkv.Ninho
-PackageVersion: 0.6.1
+PackageVersion: 0.6.2
 PackageLocale: en-US
 Publisher: phmrmkv
 PublisherUrl: https://github.com/phmrmkv
@@ -25,6 +25,6 @@ Tags:
   - mysql
   - apache
   - nodejs
-ReleaseNotesUrl: https://github.com/phmrmkv/Ninho/releases/tag/v0.6.1
+ReleaseNotesUrl: https://github.com/phmrmkv/Ninho/releases/tag/v0.6.2
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
