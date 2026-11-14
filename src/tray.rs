@@ -36,6 +36,8 @@ pub struct Tray {
     quit: MenuId,
     dot: Option<Dot>,
     tip: String,
+    /// The menu items, kept to rename them when the language changes.
+    items: [MenuItem; 4],
 }
 
 /// The 64 px logo with a status dot in the bottom-right corner.
@@ -107,7 +109,15 @@ impl Tray {
             quit: quit.id().clone(),
             dot: Some(Dot::AllOff),
             tip: String::new(),
+            items: [show, start, stop, quit],
         })
+    }
+
+    /// New texts for Show / Start all / Stop all / Exit (the language changed).
+    pub fn set_texts(&self, texts: [&str; 4]) {
+        for (item, text) in self.items.iter().zip(texts) {
+            item.set_text(text);
+        }
     }
 
     /// Everything clicked since the last frame.

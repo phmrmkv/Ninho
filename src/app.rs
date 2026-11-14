@@ -164,6 +164,8 @@ pub struct NinhoApp {
     health: Arc<std::sync::Mutex<Option<Vec<health::Finding>>>>,
     node_list: Arc<std::sync::Mutex<Option<Result<Vec<(String, String, bool)>, String>>>>,
     tray: Option<tray::Tray>,
+    /// Language the tray menu is written in (renamed when the language changes).
+    tray_lang: Option<Lang>,
     /// Language whose fonts are loaded.
     fonts_for: Option<Lang>,
     /// Another Ninho was opened: show this window.
@@ -299,6 +301,7 @@ impl NinhoApp {
             health: Arc::new(std::sync::Mutex::new(None)),
             node_list: Arc::new(std::sync::Mutex::new(None)),
             tray: None,
+            tray_lang: None,
             fonts_for: None,
             show_req: Arc::new(AtomicBool::new(false)),
             update: Arc::new(std::sync::Mutex::new(None)),
@@ -388,6 +391,7 @@ impl NinhoApp {
         if app.shot.is_none() {
             let texts = [app.t("tray_show"), app.t("start_all"), app.t("stop_all"), app.t("exit")];
             app.tray = tray::Tray::new(&cc.egui_ctx, texts);
+            app.tray_lang = Some(app.s.language);
             if app.s.start_hidden && app.tray.is_some() {
                 cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             }
@@ -1269,6 +1273,13 @@ impl NinhoApp {
                 self.shared.say(self.t("tray_note"));
                 self.hidden_note = true;
             }
+        }
+        if self.tray.is_some() && self.tray_lang != Some(self.s.language) {
+            let texts = [self.t("tray_show"), self.t("start_all"), self.t("stop_all"), self.t("exit")];
+            if let Some(t) = &self.tray {
+                t.set_texts(texts);
+            }
+            self.tray_lang = Some(self.s.language);
         }
         let enabled = self.enabled_ids();
         let on = enabled.iter().filter(|k| self.shared.state(k) == State::Running).count();
