@@ -338,5 +338,8 @@
   "import_ninho_password": "Senha do root do MySQL do Ninho (vazia se você nunca definiu)",
   "import_replace": "Estes bancos já existem no Ninho e seriam substituídos:",
   "import_load_anyway": "Substituir e carregar",
-  "port_in_use": "porta em uso por outro programa"
+  "port_in_use": "porta em uso por outro programa",
+  "theme_to_light": "Mudar para o tema claro",
+  "theme_to_dark": "Mudar para o tema escuro",
+  "update_checking": "Procurando um Ninho novo..."
 }

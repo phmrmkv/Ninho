@@ -1,20 +1,20 @@
 # winget manifest for Ninho
 
-Package identifier: `PauloMaciel.Ninho`. Ninho ships as a single portable exe, so the installer type is `portable`
+Package identifier: `Phmrmkv.Ninho`. Ninho ships as a single portable exe, so the installer type is `portable`
 and winget adds the `ninho` command to the PATH.
 
 Files:
 
-- `PauloMaciel.Ninho.yaml` (version)
-- `PauloMaciel.Ninho.locale.en-US.yaml` (name, description, tags, license)
-- `PauloMaciel.Ninho.installer.yaml` (x64 and x86 download links and hashes)
+- `Phmrmkv.Ninho.yaml` (version)
+- `Phmrmkv.Ninho.locale.en-US.yaml` (name, description, tags, license)
+- `Phmrmkv.Ninho.installer.yaml` (x64 and x86 download links and hashes)
 
 ## Fill in a release
 
 1. Open the release page and download `SHA256SUMS.txt`. It has one line per file:
    `<hash>  Ninho-x64.exe` and `<hash>  Ninho-x86.exe`. (The "Packaging hashes" workflow also prints them in its
    job summary.)
-2. In `PauloMaciel.Ninho.installer.yaml` replace each `REPLACE_WITH_SHA256` with the hash of the matching exe, and
+2. In `Phmrmkv.Ninho.installer.yaml` replace each `REPLACE_WITH_SHA256` with the hash of the matching exe, and
    `REPLACE_WITH_RELEASE_DATE` with the release date (`YYYY-MM-DD`). winget wants the hash in upper case or lower
    case, either works.
 3. Set `PackageVersion` to the new version in all three files (and the version in the URLs).
@@ -29,7 +29,7 @@ Files:
 
 ## Submit to microsoft/winget-pkgs
 
-First submission (the manifests go under `manifests/p/PauloMaciel/Ninho/<version>/`):
+First submission (the manifests go under `manifests/p/Phmrmkv/Ninho/<version>/`):
 
 ```powershell
 winget install Microsoft.WingetCreate
@@ -40,7 +40,7 @@ Later releases are simpler: `wingetcreate update` downloads both exes, computes 
 for you (it needs a GitHub token the first time, `wingetcreate token --store`):
 
 ```powershell
-wingetcreate update PauloMaciel.Ninho --version 0.6.0 `
+wingetcreate update Phmrmkv.Ninho --version 0.6.0 `
   --urls https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/Ninho-x64.exe `
          https://github.com/phmrmkv/Ninho/releases/download/v0.6.0/Ninho-x86.exe `
   --submit

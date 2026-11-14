@@ -338,5 +338,8 @@
   "import_ninho_password": "Ninho の MySQL の root パスワード（設定していなければ空欄）",
   "import_replace": "次のデータベースは Ninho にすでにあり、置き換えられます：",
   "import_load_anyway": "置き換えて読み込む",
-  "port_in_use": "別のプログラムが使用中のポート"
+  "port_in_use": "別のプログラムが使用中のポート",
+  "theme_to_light": "ライトテーマに切り替え",
+  "theme_to_dark": "ダークテーマに切り替え",
+  "update_checking": "新しい Ninho を確認しています..."
 }

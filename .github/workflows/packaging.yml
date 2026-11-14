@@ -42,7 +42,7 @@ jobs:
             echo "| Ninho-x64.exe | \`${x64}\` |"
             echo "| Ninho-x86.exe | \`${x86}\` |"
             echo
-            echo "### winget (packaging/winget/PauloMaciel.Ninho.installer.yaml)"
+            echo "### winget (packaging/winget/Phmrmkv.Ninho.installer.yaml)"
             echo
             echo '```yaml'
             echo "PackageVersion: ${version}"

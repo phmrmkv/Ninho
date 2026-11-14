@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 — 2026-11-13
+- Faster: the folders of programs and sites are read once a second instead of on every mouse move, so clicks answer at once (a frame went from about 9 ms to under 1 ms).
+- Windows and messages can be dragged aside to read what is behind them.
+- Everything that opens (windows, menus, lists) grows in with a short animation.
+- Theme: one button with a sun and a moon instead of three.
+- "Check for a new Ninho" shows its answer in a small window.
+- Author shown as phmrmkv.
+
 ## 0.6.0 — 2026-11-13
 - Welcome window on the first start: pick the language and the Ninho folder, and choose what to download now (Apache, PHP and MySQL are checked by default).
 - Self-update: Ninho checks the GitHub releases when it opens (switch it off in Preferences, or use "Check for a new Ninho" in the menu), downloads the right exe for your Windows, checks its SHA-256, swaps itself and restarts.

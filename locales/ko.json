@@ -338,5 +338,8 @@
   "import_ninho_password": "Ninho MySQL의 root 비밀번호(설정한 적이 없으면 비워 두세요)",
   "import_replace": "다음 데이터베이스는 Ninho에 이미 있으며 교체됩니다:",
   "import_load_anyway": "교체하고 불러오기",
-  "port_in_use": "다른 프로그램이 사용 중인 포트"
+  "port_in_use": "다른 프로그램이 사용 중인 포트",
+  "theme_to_light": "밝은 테마로 전환",
+  "theme_to_dark": "어두운 테마로 전환",
+  "update_checking": "새 Ninho를 찾는 중..."
 }

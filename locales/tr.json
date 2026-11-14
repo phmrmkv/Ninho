@@ -338,5 +338,8 @@
   "import_ninho_password": "Ninho'nun MySQL root parolası (hiç belirlemediyseniz boş)",
   "import_replace": "Bu veritabanları Ninho'da zaten var ve değiştirilecek:",
   "import_load_anyway": "Değiştir ve yükle",
-  "port_in_use": "port başka bir program tarafından kullanılıyor"
+  "port_in_use": "port başka bir program tarafından kullanılıyor",
+  "theme_to_light": "Açık temaya geç",
+  "theme_to_dark": "Koyu temaya geç",
+  "update_checking": "Yeni Ninho aranıyor..."
 }

@@ -338,5 +338,8 @@
   "import_ninho_password": "Contraseña de root del MySQL de Ninho (vacía si nunca pusiste una)",
   "import_replace": "Estas bases de datos ya existen en Ninho y se reemplazarían:",
   "import_load_anyway": "Reemplazar y cargar",
-  "port_in_use": "puerto en uso por otro programa"
+  "port_in_use": "puerto en uso por otro programa",
+  "theme_to_light": "Cambiar al tema claro",
+  "theme_to_dark": "Cambiar al tema oscuro",
+  "update_checking": "Buscando un Ninho nuevo..."
 }

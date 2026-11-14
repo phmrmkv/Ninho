@@ -240,6 +240,10 @@ pub fn latest(lang: Lang, tool: &str) -> Result<Latest, String> {
 
 /// Version folders of a tool already in <root>\bin (any folder with files, newest last).
 pub fn installed(root: &str, dir: &str) -> Vec<String> {
+    crate::services::memo(format!("installed|{root}|{dir}"), || installed_now(root, dir))
+}
+
+fn installed_now(root: &str, dir: &str) -> Vec<String> {
     let mut v: Vec<String> = std::fs::read_dir(Path::new(root).join("bin").join(dir))
         .map(|rd| {
             rd.filter_map(|e| e.ok())

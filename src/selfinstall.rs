@@ -82,7 +82,7 @@ pub fn install(version: &str) -> Result<PathBuf, String> {
     let entries: [(&str, &str, String); 9] = [
         ("DisplayName", "REG_SZ", "Ninho".into()),
         ("DisplayVersion", "REG_SZ", version.into()),
-        ("Publisher", "REG_SZ", "Paulo Maciel".into()),
+        ("Publisher", "REG_SZ", "phmrmkv".into()),
         ("DisplayIcon", "REG_SZ", exe_s.clone()),
         ("InstallLocation", "REG_SZ", dir.to_string_lossy().into_owned()),
         ("UninstallString", "REG_SZ", format!("\"{exe_s}\" --uninstall-app")),

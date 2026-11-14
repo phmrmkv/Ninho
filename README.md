@@ -87,7 +87,7 @@ source (MIT or GPL-3.0, your choice), portable** local development environment w
 Prefer a package manager? These work after the first release is published:
 
 ```powershell
-winget install PauloMaciel.Ninho
+winget install Phmrmkv.Ninho
 scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho
 scoop install ninho
 ```
@@ -184,7 +184,7 @@ clique, direto dos sites oficiais. Não tem instalador: é só abrir o `Ninho.ex
 Instalar por gerenciador de pacotes (funciona depois da primeira release):
 
 ```powershell
-winget install PauloMaciel.Ninho
+winget install Phmrmkv.Ninho
 scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho
 scoop install ninho
 ```
@@ -196,6 +196,6 @@ estão.
 
 ## License
 
-Dual-licensed under [MIT](LICENSE-MIT) or [GPL-3.0](LICENSE-GPL-3.0), at your option. © Paulo Maciel. Ninho is not affiliated with Apache, Oracle (MySQL), the PHP Group, the OpenJS
+Dual-licensed under [MIT](LICENSE-MIT) or [GPL-3.0](LICENSE-GPL-3.0), at your option. © phmrmkv. Ninho is not affiliated with Apache, Oracle (MySQL), the PHP Group, the OpenJS
 Foundation (Node.js), Mailpit, Redis, XAMPP, WampServer or Laragon; their names are used only to say what Ninho runs
 or replaces.

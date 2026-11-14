@@ -338,5 +338,8 @@
   "import_ninho_password": "Kata sandi root MySQL Ninho (kosong jika belum pernah diatur)",
   "import_replace": "Database ini sudah ada di Ninho dan akan diganti:",
   "import_load_anyway": "Ganti dan muat",
-  "port_in_use": "port dipakai program lain"
+  "port_in_use": "port dipakai program lain",
+  "theme_to_light": "Beralih ke tema terang",
+  "theme_to_dark": "Beralih ke tema gelap",
+  "update_checking": "Mencari Ninho baru..."
 }

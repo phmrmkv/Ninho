@@ -183,6 +183,12 @@ pub struct NinhoApp {
     imp_pending: Arc<std::sync::Mutex<Option<(PathBuf, Vec<String>, Vec<String>)>>>,
     /// The update is in place: restart into this exe once the servers are stopped.
     restart_to: Arc<std::sync::Mutex<Option<PathBuf>>>,
+    /// Answer of "Check for a new Ninho" shown in a small window (None = closed), and "open the update window".
+    upd_msg: Arc<std::sync::Mutex<Option<String>>>,
+    upd_open: Arc<AtomicBool>,
+    /// When each window, menu or list appeared (for the pop-in animation); `pops_ready` skips the very first frame.
+    pops: std::collections::HashMap<egui::LayerId, std::time::Instant>,
+    pops_ready: bool,
     /// First start: the welcome window (folder, language, what to download).
     welcome: bool,
     /// True while the user moves with Tab / arrows (the focus ring shows); a click turns it off.
@@ -297,6 +303,10 @@ impl NinhoApp {
             imp_busy: Arc::new(AtomicBool::new(false)),
             imp_pending: Arc::new(std::sync::Mutex::new(None)),
             restart_to: Arc::new(std::sync::Mutex::new(None)),
+            upd_msg: Arc::new(std::sync::Mutex::new(None)),
+            upd_open: Arc::new(AtomicBool::new(false)),
+            pops: std::collections::HashMap::new(),
+            pops_ready: false,
             welcome: false,
             kbd_nav: false,
             win_stack: Vec::new(),
@@ -674,22 +684,48 @@ impl NinhoApp {
                             }
                             ui.add_space(8.0);
                         }
-                        // Theme: Sistema / Escuro / Claro (right to left), saved in ninho.json.
-                        let mut pick_theme = None;
-                        for (key, label) in [("system", "theme_system"), ("dark", "theme_dark"), ("light", "theme_light")] {
-                            let on = self.s.theme == key;
-                            let b = button(self.t(label), if on { Tone::Nav } else { Tone::Neutral }, CONTROL_SM).min_size(vec2(72.0, CONTROL_SM));
-                            if toggle_named(ui.add(b), self.t(label), on).clicked() {
-                                pick_theme = Some(key);
-                            }
-                        }
-                        if let Some(k) = pick_theme {
-                            self.s.theme = k.into();
+                        // Theme: one button, a sun in the light theme and a moon in the dark one; a click switches (saved in ninho.json).
+                        if self.theme_button(ui) {
+                            self.s.theme = if dark() { "light" } else { "dark" }.into();
                             self.save();
                         }
                     });
                 });
             });
+    }
+
+    /// Sun (light theme) or moon (dark theme), crossfading and turning when the theme changes. True when clicked.
+    fn theme_button(&self, ui: &mut egui::Ui) -> bool {
+        let size = vec2(CONTROL, CONTROL_SM);
+        let (r, painter) = ui.allocate_painter(size, egui::Sense::click());
+        let to = if dark() { self.t("theme_to_light") } else { self.t("theme_to_dark") };
+        let r = named(r, to).on_hover_text(to);
+        let rect = r.rect;
+        let hot = r.hovered() || r.has_focus();
+        let bg = if hot { surface2() } else { surface() };
+        painter.rect(rect, CornerRadius::same(RADIUS), bg, Stroke::new(1.0, if hot { brand() } else { line() }), egui::StrokeKind::Inside);
+        let t = ui.ctx().animate_bool_with_time(egui::Id::unique("theme-icon"), dark(), 0.35);
+        let c = rect.center();
+        let col = if hot { brand() } else { fg() };
+        // Sun: a disc and 8 rays that shrink and turn away as the moon comes in.
+        if t < 1.0 {
+            let a = 1.0 - t;
+            let sun = col.gamma_multiply(a);
+            painter.circle_filled(c, 4.2 * (0.6 + 0.4 * a), sun);
+            for i in 0..8 {
+                let ang = i as f32 * std::f32::consts::FRAC_PI_4 + t * 1.2;
+                let d = vec2(ang.cos(), ang.sin());
+                painter.line_segment([c + d * 6.6, c + d * (6.6 + 2.6 * a)], Stroke::new(1.6, sun));
+            }
+        }
+        // Moon: a disc with a bite taken by a disc of the button's own color.
+        if t > 0.0 {
+            let moon = col.gamma_multiply(t);
+            let rad = 6.4 * (0.7 + 0.3 * t);
+            painter.circle_filled(c, rad, moon);
+            painter.circle_filled(c + vec2(3.4, -2.6) * (0.6 + 0.4 * t), rad * 0.82, bg);
+        }
+        r.clicked()
     }
 
     fn side_btn<'a>(&self, ui: &egui::Ui, text: &str) -> egui::Button<'a> {
@@ -761,6 +797,7 @@ impl NinhoApp {
                     }
                     if ui.button(self.t("check_update")).clicked() {
                         let ctx = ui.ctx().clone();
+                        *self.upd_msg.lock().unwrap() = Some(self.t("update_checking").to_string());
                         self.check_update(&ctx, true);
                         ui.close();
                     }
@@ -1435,7 +1472,7 @@ impl NinhoApp {
         let mut open = self.health_win;
         let list = self.health.lock().unwrap().clone();
         let mut again = false;
-        egui::Window::new(self.t("health")).open(&mut open).resizable(true).default_size(vec2(640.0, 480.0)).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        egui::Window::new(self.t("health")).open(&mut open).resizable(true).default_size(vec2(640.0, 480.0)).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             match &list {
                 None => {
                     ui.horizontal(|ui| {
@@ -1494,7 +1531,7 @@ impl NinhoApp {
     fn welcome_window(&mut self, ctx: &egui::Context) {
         let mut go = false;
         let mut later = false;
-        egui::Window::new(self.t("welcome_title")).collapsible(false).resizable(false).default_width(520.0).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        egui::Window::new(self.t("welcome_title")).collapsible(false).resizable(false).default_width(520.0).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.label(RichText::new(self.t("welcome_intro")).size(14.0).color(fg()));
             ui.add_space(8.0);
             egui::Grid::new("wl").num_columns(2).spacing([12.0, 10.0]).show(ui, |ui| {
@@ -1571,21 +1608,30 @@ impl NinhoApp {
 
     /// Ask GitHub for a newer Ninho in the background. `say`: also report "up to date" or the error (menu check).
     fn check_update(&self, ctx: &egui::Context, say: bool) {
-        let (slot, shared, ctx, lang) = (self.update.clone(), self.shared.clone(), ctx.clone(), self.s.language);
+        let (slot, shared, ctx, lang, msg, open) = (self.update.clone(), self.shared.clone(), ctx.clone(), self.s.language, self.upd_msg.clone(), self.upd_open.clone());
         std::thread::spawn(move || {
             match crate::selfupdate::check() {
                 Ok(Some(r)) => {
                     shared.say(format!("{} {}", tr(lang, "update_available"), r.version));
                     *slot.lock().unwrap() = Some(r);
+                    if say {
+                        // Asked from the menu: go straight to the update window.
+                        *msg.lock().unwrap() = None;
+                        open.store(true, Ordering::SeqCst);
+                    }
                 }
                 Ok(None) => {
                     if say {
-                        shared.say(format!("{} ({})", tr(lang, "up_to_date_ninho"), env!("CARGO_PKG_VERSION")));
+                        let text = format!("{} ({})", tr(lang, "up_to_date_ninho"), env!("CARGO_PKG_VERSION"));
+                        shared.say(text.clone());
+                        *msg.lock().unwrap() = Some(text);
                     }
                 }
                 Err(e) => {
                     if say {
-                        shared.say(format!("{} {e}", tr(lang, "update_failed")));
+                        let text = format!("{} {e}", tr(lang, "update_failed"));
+                        shared.say(text.clone());
+                        *msg.lock().unwrap() = Some(text);
                     }
                 }
             }
@@ -1602,7 +1648,7 @@ impl NinhoApp {
         let state = self.update_state.lock().unwrap().clone();
         let mut open = self.update_win;
         let mut start = false;
-        egui::Window::new(format!("Ninho {}", r.version)).open(&mut open).collapsible(false).resizable(true).default_size(vec2(560.0, 380.0)).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        egui::Window::new(format!("Ninho {}", r.version)).open(&mut open).collapsible(false).resizable(true).default_size(vec2(560.0, 380.0)).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.label(RichText::new(format!("{} {} → {}", self.t("update_from_to"), env!("CARGO_PKG_VERSION"), r.version)).color(fg()));
             egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                 ui.label(RichText::new(&r.notes).size(12.5).color(muted()));
@@ -1648,6 +1694,37 @@ impl NinhoApp {
         }
     }
 
+    /// Everything that opens (windows, menus, lists) grows in from 92 % over a fifth of a second; windows also fade in.
+    fn pop_step(&mut self, ctx: &egui::Context) {
+        let now = std::time::Instant::now();
+        let shown: Vec<(egui::LayerId, egui::Rect)> = ctx.memory(|m| {
+            m.areas()
+                .visible_layer_ids()
+                .into_iter()
+                .filter(|l| matches!(l.order, egui::Order::Middle | egui::Order::Foreground))
+                .filter_map(|l| m.area_rect(l.id).map(|r| (l, r)))
+                .collect()
+        });
+        self.pops.retain(|l, _| shown.iter().any(|(s, _)| s == l));
+        let mut moving = false;
+        for (l, r) in shown {
+            let ready = self.pops_ready;
+            let start = *self.pops.entry(l).or_insert_with(|| if ready { now } else { now - std::time::Duration::from_secs(1) });
+            let t: f32 = (now - start).as_secs_f32() / 0.2;
+            if t < 1.0 {
+                let e: f32 = 1.0 - (1.0 - t).powi(3);
+                let s = 0.92 + 0.08 * e;
+                let c = r.center().to_vec2();
+                ctx.transform_layer_shapes(l, egui::emath::TSTransform::from_translation(c * (1.0 - s)) * egui::emath::TSTransform::from_scaling(s));
+                moving = true;
+            }
+        }
+        self.pops_ready = true;
+        if moving {
+            ctx.request_repaint();
+        }
+    }
+
     fn open_import(&mut self) {
         self.imp_found = crate::importer::find(Path::new(&self.s.root));
         self.imp_win = true;
@@ -1660,7 +1737,7 @@ impl NinhoApp {
         let need_pass = self.imp_need_pass.load(Ordering::Relaxed);
         let mut run: Option<(usize, bool)> = None; // (which install, true = databases)
         let mut load_now: Option<PathBuf> = None;
-        egui::Window::new(self.t("import_title")).open(&mut open).collapsible(false).resizable(true).default_width(620.0).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        egui::Window::new(self.t("import_title")).open(&mut open).collapsible(false).resizable(true).default_width(620.0).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.label(RichText::new(self.t("import_intro")).color(fg()));
             ui.add_space(6.0);
             if self.imp_found.is_empty() {
@@ -1798,7 +1875,7 @@ impl NinhoApp {
         let mut open = self.node_win;
         let list = self.node_list.lock().unwrap().clone();
         let have = nodever::installed(&self.s);
-        egui::Window::new(self.t("node_more")).open(&mut open).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        egui::Window::new(self.t("node_more")).open(&mut open).collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.label(RichText::new(self.t("node_hint")).size(12.0).color(muted()));
             ui.add_space(6.0);
             match list {
@@ -1988,7 +2065,7 @@ impl NinhoApp {
             .collapsible(false)
             .resizable(true)
             .default_size(vec2(620.0, 460.0))
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let mysqls: Vec<(String, String)> = self.s.services.iter().filter(|c| c.key == "mysql").map(|c| (c.id.clone(), format!("{} ({})", c.title(), c.port))).collect();
@@ -2084,7 +2161,7 @@ impl NinhoApp {
         // Restoring replaces the tables of that database: ask first.
         if let Some((file, db)) = self.db.confirm.clone() {
             let mut keep = true;
-            egui::Window::new(self.t("restore")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+            egui::Window::new(self.t("restore")).collapsible(false).resizable(false).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
                 ui.label(format!("{} {db} {} {}?", self.t("restore_q1"), self.t("restore_q2"), file.file_name().unwrap_or_default().to_string_lossy()));
                 ui.label(RichText::new(self.t("restore_warn")).size(12.0).color(muted()));
                 ui.horizontal(|ui| {
@@ -2297,7 +2374,7 @@ impl NinhoApp {
             .collapsible(false)
             .resizable(false)
             .default_width(560.0)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.label(RichText::new(self.t("updates_hint")).size(12.0).color(muted()));
                 ui.add_space(6.0);
@@ -2348,7 +2425,7 @@ impl NinhoApp {
         egui::Window::new(self.t("stop_program"))
             .collapsible(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.label(format!("{} {} (PID {}) — {} {}", self.t("stop_question"), l.program, l.pid, self.t("port"), l.port));
                 ui.label(RichText::new(self.t("stop_warning")).size(12.0).color(muted()));
@@ -2381,7 +2458,7 @@ impl NinhoApp {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.label(RichText::new(self.t("new_server_hint")).size(12.0).color(muted()));
                 ui.add_space(4.0);
@@ -2439,7 +2516,7 @@ impl NinhoApp {
             .collapsible(false)
             .resizable(false)
             .default_width(460.0)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.prefs_tab, 0, tr(lang, "general"));
@@ -2552,7 +2629,7 @@ impl NinhoApp {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 egui::Grid::new("np").num_columns(2).spacing([12.0, 10.0]).show(ui, |ui| {
                     ui.label(self.t("project_name"));
@@ -2619,7 +2696,7 @@ impl NinhoApp {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 egui::Grid::new("db").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                     if mysqls.len() > 1 {
@@ -2765,6 +2842,7 @@ impl NinhoApp {
 
 impl eframe::App for NinhoApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let t0 = std::time::Instant::now();
         let ctx = ui.ctx().clone();
         // NINHO_THEME=dark|light forces a theme (used by the screenshot check).
         let forced = std::env::var("NINHO_THEME").ok();
@@ -2793,8 +2871,31 @@ impl eframe::App for NinhoApp {
         if self.welcome {
             self.welcome_window(&ctx);
         }
+        if self.upd_open.swap(false, Ordering::SeqCst) {
+            self.update_win = true;
+        }
         if self.update_win {
             self.update_window(&ctx);
+        }
+        let note = self.upd_msg.lock().unwrap().clone();
+        if let Some(text) = note {
+            let mut open = true;
+            let mut ok = false;
+            egui::Window::new("Ninho").id(egui::Id::unique("upd-note")).open(&mut open).collapsible(false).resizable(false).default_width(380.0).pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(&ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if text == self.t("update_checking") {
+                        ui.spinner();
+                    }
+                    ui.label(RichText::new(&text).color(fg()));
+                });
+                ui.add_space(6.0);
+                if ui.add(button("OK", Tone::Primary, CONTROL)).clicked() {
+                    ok = true;
+                }
+            });
+            if !open || ok {
+                *self.upd_msg.lock().unwrap() = None;
+            }
         }
         let restart = self.restart_to.lock().unwrap().take();
         if let Some(exe) = restart {
@@ -2847,6 +2948,14 @@ impl eframe::App for NinhoApp {
         }
         self.kill_window(&ctx);
         self.keyboard_step(&ctx);
+        self.pop_step(&ctx);
+        // NINHO_PROFILE=1: time of each frame goes to tmp\ninho-profile.log (ms), to find what makes clicks feel slow.
+        if std::env::var_os("NINHO_PROFILE").is_some() {
+            let ms = t0.elapsed().as_secs_f64() * 1000.0;
+            if let Ok(mut h) = std::fs::OpenOptions::new().create(true).append(true).open(Path::new(&self.s.root).join("tmp").join("ninho-profile.log")) {
+                let _ = std::io::Write::write_all(&mut h, format!("{ms:.1} tab={} prefs={} welcome={} lang={}\n", self.tab, self.show_prefs, self.welcome, self.s.language.code()).as_bytes());
+            }
+        }
         // Keep the activity list and states fresh.
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
     }

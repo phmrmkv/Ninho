@@ -338,5 +338,8 @@
   "import_ninho_password": "Ninho के MySQL का root पासवर्ड (अगर कभी सेट नहीं किया तो खाली छोड़ें)",
   "import_replace": "ये डेटाबेस Ninho में पहले से हैं और बदल दिए जाएँगे:",
   "import_load_anyway": "बदलें और लोड करें",
-  "port_in_use": "पोर्ट किसी दूसरे प्रोग्राम के उपयोग में है"
+  "port_in_use": "पोर्ट किसी दूसरे प्रोग्राम के उपयोग में है",
+  "theme_to_light": "हल्की थीम पर जाएँ",
+  "theme_to_dark": "गहरी थीम पर जाएँ",
+  "update_checking": "नया Ninho खोजा जा रहा है..."
 }

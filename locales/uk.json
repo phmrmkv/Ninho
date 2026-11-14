@@ -338,5 +338,8 @@
   "import_ninho_password": "Пароль root для MySQL у Ninho (порожній, якщо ви його не задавали)",
   "import_replace": "Ці бази даних уже є в Ninho і будуть замінені:",
   "import_load_anyway": "Замінити й завантажити",
-  "port_in_use": "порт зайнятий іншою програмою"
+  "port_in_use": "порт зайнятий іншою програмою",
+  "theme_to_light": "Увімкнути світлу тему",
+  "theme_to_dark": "Увімкнути темну тему",
+  "update_checking": "Шукаю нову версію Ninho..."
 }

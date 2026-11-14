@@ -64,7 +64,30 @@ pub fn hide_window(cmd: &mut Command) {
 }
 
 /// Version folders installed for a kind, oldest name first.
+/// The answer of `f` for `key`, reused for one second. The window redraws on every mouse move; reading the bin and
+/// www folders each time made clicks feel slow, and a second is far shorter than any install or folder change.
+pub fn memo<T: Clone + Send + 'static>(key: String, f: impl FnOnce() -> T) -> T {
+    use std::any::Any;
+    type Cache = Mutex<HashMap<String, (Instant, Box<dyn Any + Send>)>>;
+    static M: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
+    let m = M.get_or_init(Default::default);
+    if let Some((t, v)) = m.lock().unwrap().get(&key) {
+        if t.elapsed() < Duration::from_secs(1) {
+            if let Some(v) = v.downcast_ref::<T>() {
+                return v.clone();
+            }
+        }
+    }
+    let v = f();
+    m.lock().unwrap().insert(key, (Instant::now(), Box::new(v.clone())));
+    v
+}
+
 pub fn versions(root: &str, d: &ServiceDef) -> Vec<String> {
+    memo(format!("versions|{root}|{}|{}", d.dir, d.exe), || versions_now(root, d))
+}
+
+fn versions_now(root: &str, d: &ServiceDef) -> Vec<String> {
     let mut out: Vec<String> = std::fs::read_dir(Path::new(root).join("bin").join(d.dir))
         .map(|rd| {
             rd.filter_map(|e| e.ok())

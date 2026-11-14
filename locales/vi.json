@@ -338,5 +338,8 @@
   "import_ninho_password": "Mật khẩu root của MySQL trong Ninho (để trống nếu bạn chưa từng đặt)",
   "import_replace": "Các cơ sở dữ liệu này đã có trong Ninho và sẽ bị thay thế:",
   "import_load_anyway": "Thay thế và nạp",
-  "port_in_use": "cổng đang được chương trình khác dùng"
+  "port_in_use": "cổng đang được chương trình khác dùng",
+  "theme_to_light": "Chuyển sang giao diện sáng",
+  "theme_to_dark": "Chuyển sang giao diện tối",
+  "update_checking": "Đang tìm Ninho mới..."
 }

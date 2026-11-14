@@ -10,6 +10,7 @@ pub const MARKER: &str = "#ninho local";
 /// The marker starts at this column, so the hosts file stays aligned.
 const MARKER_COLUMN: usize = 50;
 
+#[derive(Clone)]
 pub struct Site {
     pub folder: String,
     pub host: String,
@@ -46,6 +47,11 @@ pub fn hostname(fmt: &str, folder: &str) -> String {
 
 /// Folders of the document root that become sites.
 pub fn list(s: &Settings) -> Vec<Site> {
+    let key = format!("sites|{}|{}|{}", s.doc_root, s.hostname_format, s.ignore_list.join("|"));
+    crate::services::memo(key, || list_now(s))
+}
+
+fn list_now(s: &Settings) -> Vec<Site> {
     let mut out: Vec<Site> = std::fs::read_dir(&s.doc_root)
         .map(|rd| {
             rd.filter_map(|e| e.ok())

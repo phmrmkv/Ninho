@@ -338,5 +338,8 @@
   "import_ninho_password": "Ninho 的 MySQL root 密碼（若從未設定則留空）",
   "import_replace": "以下資料庫在 Ninho 中已存在，將被取代：",
   "import_load_anyway": "取代並載入",
-  "port_in_use": "連接埠被其他程式占用"
+  "port_in_use": "連接埠被其他程式占用",
+  "theme_to_light": "切換到淺色主題",
+  "theme_to_dark": "切換到深色主題",
+  "update_checking": "正在尋找新版 Ninho..."
 }
