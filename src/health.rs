@@ -147,6 +147,9 @@ pub(crate) fn parse_excluded(text: &str) -> Vec<(u16, u16)> {
 }
 
 fn excluded_ranges() -> Vec<(u16, u16)> {
+    if !cfg!(windows) {
+        return Vec::new();
+    }
     let mut c = Command::new("netsh");
     c.args(["int", "ipv4", "show", "excludedportrange", "protocol=tcp"]);
     services::hide_window(&mut c);
@@ -207,7 +210,7 @@ fn servers(s: &Settings, listeners: &[ports::Listener], out: &mut Vec<Finding>) 
         if services::version_dir(s, &c.id).is_none() {
             out.push(warn(
                 f(l, "h_notinst_t", &[("name", &name)]),
-                f(l, "h_notinst_d", &[("exe", &d.exe.to_string()), ("dir", &format!("{}\\bin\\{}", s.root, d.dir))]),
+                f(l, "h_notinst_d", &[("exe", &d.exe.to_string()), ("dir", &crate::platform::join(&s.root, &["bin", d.dir]))]),
                 tr(l, "h_notinst_fix"),
             ));
             continue;
@@ -249,13 +252,17 @@ fn apache(s: &Settings, out: &mut Vec<Finding>) {
         return;
     }
     let Some(v) = services::version_dir(s, "apache") else { return };
-    let exe = v.join(r"bin\httpd.exe");
+    let exe = v.join("bin").join(crate::platform::exe("httpd"));
     // conf/ninho.conf is written at the first start; before that httpd.conf still points at the zip's own folder
     // and the test would complain about folders that are fine.
-    if !v.join(r"conf\ninho.conf").is_file() {
+    if !v.join("conf").join("ninho.conf").is_file() {
         out.push(ok(tr(l, "h_apc_pending_t"), tr(l, "h_apc_pending_d")));
     } else {
-        match run(&exe, &["-t"], Some(&v)) {
+        // Linux and macOS: the system Apache needs to be told where Ninho's config is.
+        let conf = v.join("conf").join("httpd.conf").to_string_lossy().into_owned();
+        let vs = v.to_string_lossy().into_owned();
+        let args: Vec<&str> = if cfg!(windows) { vec!["-t"] } else { vec!["-d", &vs, "-f", &conf, "-t"] };
+        match run(&exe, &args, Some(&v)) {
             None => out.push(err(tr(l, "h_apc_nostart_t"), f(l, "h_apc_nostart_d", &[("exe", &exe.display().to_string())]), tr(l, "h_apc_nostart_fix"))),
             Some((_, text)) => match httpd_verdict(&text) {
                 Ok(()) => out.push(ok(tr(l, "h_apc_ok_t"), tr(l, "h_apc_ok_d"))),
@@ -266,8 +273,8 @@ fn apache(s: &Settings, out: &mut Vec<Finding>) {
             },
         }
     }
-    // PHP as an Apache module.
-    if let Some(php) = services::version_dir(s, "php") {
+    // PHP as an Apache module (Windows; on Linux and macOS it is the system's mod_php, in httpd.conf).
+    if let Some(php) = services::version_dir(s, "php").filter(|_| cfg!(windows)) {
         if php_module(&php).is_some() {
             out.push(ok(tr(l, "h_mod_ok_t"), tr(l, "h_mod_ok_d")));
         } else {
@@ -306,7 +313,7 @@ fn php(s: &Settings, out: &mut Vec<Finding>) {
     let Some(v) = services::version_dir(s, "php") else { return };
     let label = v.file_name().unwrap_or_default().to_string_lossy().into_owned();
     // -n: no php.ini, so a broken ini cannot hide a broken PHP (and the other way round).
-    match run(&v.join("php.exe"), &["-n", "-v"], Some(&v)) {
+    match run(&v.join(crate::platform::exe("php")), &["-n", "-v"], Some(&v)) {
         Some((true, text)) if text.contains("PHP") => {
             let line = text.lines().map(str::trim).find(|x| x.starts_with("PHP")).unwrap_or(tr(l, "h_php_run_d")).to_string();
             out.push(ok(f(l, "h_php_run_t", &[("label", &label)]), line));
@@ -315,6 +322,10 @@ fn php(s: &Settings, out: &mut Vec<Finding>) {
             out.push(err(f(l, "h_php_norun_t", &[("label", &label)]), tr(l, "h_php_norun_d"), tr(l, "h_php_norun_fix")));
             return;
         }
+    }
+    // Linux and macOS: the system PHP keeps its php.ini (and extensions) where the package manager put them.
+    if !cfg!(windows) {
+        return;
     }
     let ini = v.join("php.ini");
     let Ok(text) = std::fs::read_to_string(&ini) else {
@@ -394,8 +405,7 @@ fn site_folder(s: &Settings, out: &mut Vec<Finding>) {
 }
 
 fn hosts_path() -> PathBuf {
-    let win = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&win).join(r"System32\drivers\etc\hosts")
+    PathBuf::from(crate::platform::hosts_path())
 }
 
 /// How many lines of the hosts file Ninho owns.
@@ -478,9 +488,14 @@ fn free_bytes(path: &Path) -> Option<u64> {
     (r != 0).then_some(avail)
 }
 
+/// Linux and macOS: `df -Pk` (POSIX output, 1 KB blocks), column "Available" of its second line.
 #[cfg(not(windows))]
-fn free_bytes(_path: &Path) -> Option<u64> {
-    None
+fn free_bytes(path: &Path) -> Option<u64> {
+    let dir = path.ancestors().find(|p| p.is_dir())?;
+    let out = Command::new("df").arg("-Pk").arg(dir).stdin(Stdio::null()).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let cols: Vec<&str> = text.lines().nth(1)?.split_whitespace().collect();
+    cols.get(3)?.parse::<u64>().ok().map(|k| k * 1024)
 }
 
 /// Gigabytes with one decimal, written the way the language writes numbers (1,5 or 1.5).

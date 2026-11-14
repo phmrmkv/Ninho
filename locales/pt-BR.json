@@ -546,5 +546,12 @@
   "stop_container": "Parar contêiner",
   "stop_container_text": "Parar o contêiner Docker {name} ({image}), que publica a(s) porta(s) {ports}? Ele é parado com docker stop; o contêiner e os dados dele ficam.",
   "log_container_stopped": "Contêiner parado:",
-  "log_container_stop_failed": "Não deu para parar o contêiner"
+  "log_container_stop_failed": "Não deu para parar o contêiner",
+  "unix_not_found": "não está neste computador. Instale pelo gerenciador de pacotes e clique em Instalar de novo: {cmd}",
+  "unix_using_system": "usando o que já está instalado neste computador:",
+  "log_hosts_run": "Para mudar o arquivo hosts, rode num terminal (ele pede a sua senha):",
+  "unix_updates_note": "Linux e macOS (prévia): Apache, PHP, MySQL, MariaDB, PostgreSQL e Redis vêm do gerenciador de pacotes (apt, dnf, Homebrew); Instalar usa o que já está neste computador, com as configurações, dados e portas do próprio Ninho. Mailpit e Node.js são baixados dos sites oficiais. Os servidores rodam com o seu usuário, por isso o Apache fica na porta 8080: portas abaixo de 1024 pedem administrador.",
+  "unix_missing": "não está neste computador",
+  "install_app_unavailable": "Instalar ainda não está disponível no macOS: rode o Ninho de qualquer pasta.",
+  "unix_mysql_apparmor": "O perfil do AppArmor do Ubuntu só deixa o mysqld usar /var/lib/mysql. Use o MariaDB no Ninho, ou libere outras pastas para o MySQL com: sudo aa-complain /usr/sbin/mysqld"
 }

@@ -153,7 +153,7 @@ pub fn set_env(cmd: &mut Command, s: &Settings, id: &str, typed: &str) {
 
 /// `mysql.exe`, or `mariadb.exe` (newer MariaDB has no mysql.exe), in a version folder's bin.
 pub fn client_exe(version_dir: &Path) -> Option<PathBuf> {
-    ["mysql.exe", "mariadb.exe"].iter().map(|n| version_dir.join("bin").join(n)).find(|p| p.is_file())
+    ["mysql", "mariadb"].iter().map(|n| version_dir.join("bin").join(crate::platform::exe(n))).find(|p| p.is_file())
 }
 
 fn base_cmd(s: &Settings, id: &str, password: &str) -> Result<Command, String> {

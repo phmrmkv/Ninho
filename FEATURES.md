@@ -124,7 +124,7 @@ Tools: **LAR** Laragon · **FLY** FlyEnv · **DOC** Docker Desktop · **DDEV** D
 - ✅ Import from XAMPP, WampServer and Laragon: copies the sites and the databases, the old install is only read
 - 🟡 winget and Scoop packages: manifests ready, they go live after the first release
 - ⬜ Install a module as a Windows service (XAMPP)
-- ⬜ macOS / Linux: on the roadmap (FLY, DOC, DDEV, HERD, MAMP)
+- 🟡 Linux and macOS: preview builds (servers from the package manager, run as the user on Ninho's own ports; Nginx, HTTPS and Xdebug still Windows-only) (FLY, DOC, DDEV, HERD, MAMP)
 - ➖ Containers (DOC, DDEV)
 - ✅ Free and open source: MIT or GPL-3.0, at your choice (FLY, DDEV)
 

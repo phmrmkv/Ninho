@@ -175,12 +175,22 @@ pub fn command(t: &Template, name: &str, source_override: Option<&str>) -> Optio
         "composer" => {
             let mut c = format!("composer create-project {src} {name} --prefer-dist --no-interaction");
             if src.starts_with("symfony/skeleton") {
-                c.push_str(&format!(" && echo. && echo Tip - for a full website run: cd {name} then composer require webapp"));
+                let blank_line = if cfg!(windows) { "echo." } else { "echo" };
+                c.push_str(&format!(" && {blank_line} && echo Tip - for a full website run: cd {name} then composer require webapp"));
             }
             Some(c)
         }
         "git" => Some(format!("git clone {src} {name}")),
         "npm" => Some(src.replace("{name}", name)),
+        // Linux and macOS: the same steps in sh (unzip reads ZIP files everywhere; GNU tar cannot).
+        "zip" if !cfg!(windows) => {
+            let zip = format!(".ninho-{name}.zip");
+            let tmp = format!(".ninho-{name}.tmp");
+            Some(format!(
+                "curl -L -f --retry 2 -o {zip} {src} && mkdir {tmp} && unzip -q {zip} -d {tmp} && \
+                 (set -- {tmp}/*; if [ $# -eq 1 ] && [ -d \"$1\" ]; then mv \"$1\" {name} && rmdir {tmp}; else mv {tmp} {name}; fi) && rm {zip}"
+            ))
+        }
         "zip" => {
             let zip = format!(".ninho-{name}.zip");
             let tmp = format!(".ninho-{name}.tmp");
@@ -224,19 +234,26 @@ pub fn create_direct(t: &Template, dir: &Path) -> std::io::Result<()> {
 pub fn missing_tools(t: &Template, path_env: &str) -> Vec<&'static str> {
     let on_path = |files: &[&str]| {
         path_env
-            .split(';')
+            .split(crate::platform::PATH_SEP)
             .filter(|d| !d.trim().is_empty())
             .any(|d| files.iter().any(|f| Path::new(d.trim()).join(f).is_file()))
     };
     let mut out = Vec::new();
+    // Linux and macOS: the programs have no extension.
+    let unix = !cfg!(windows);
+    let (composer, git, npm, node): (&[&str], &[&str], &[&str], &[&str]) = if unix {
+        (&["composer", "composer.phar"], &["git"], &["npm"], &["node"])
+    } else {
+        (&["composer.bat", "composer.cmd", "composer.exe"], &["git.exe", "git.cmd"], &["npm.cmd", "npm.exe"], &["node.exe"])
+    };
     match t.kind.as_str() {
-        "composer" if !on_path(&["composer.bat", "composer.cmd", "composer.exe"]) => out.push("composer"),
-        "git" if !on_path(&["git.exe", "git.cmd"]) => out.push("git"),
+        "composer" if !on_path(composer) => out.push("composer"),
+        "git" if !on_path(git) => out.push("git"),
         "npm" => {
-            if !on_path(&["npm.cmd", "npm.exe"]) {
+            if !on_path(npm) {
                 out.push("npm");
             }
-            if !on_path(&["node.exe"]) {
+            if !on_path(node) {
                 out.push("node");
             }
         }
@@ -270,6 +287,7 @@ mod tests {
         assert!(sf.contains("symfony/skeleton s") && sf.contains("webapp"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn zip_command_uses_system_tools() {
         let c = command(&find("WordPress"), "wp", None).unwrap();
@@ -341,6 +359,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    #[cfg(windows)]
     #[test]
     fn missing_tools_with_fake_path() {
         let a = tmp("pa");
@@ -358,5 +377,19 @@ mod tests {
         std::fs::write(a.join("node.exe"), "").unwrap();
         assert!(missing_tools(&find("Vite + Vue"), &path).is_empty());
         let _ = (std::fs::remove_dir_all(a), std::fs::remove_dir_all(b));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_zip_command_and_tools() {
+        let c = command(&find("WordPress"), "wp", None).unwrap();
+        assert!(c.starts_with("curl -L -f --retry 2 -o .ninho-wp.zip https://wordpress.org/latest.zip"));
+        assert!(c.contains("unzip -q .ninho-wp.zip -d .ninho-wp.tmp") && c.contains("mv \"$1\" wp"));
+        let a = tmp("ua");
+        std::fs::write(a.join("composer"), "").unwrap();
+        let path = format!("{}:", a.display());
+        assert!(missing_tools(&find("Laravel"), &path).is_empty());
+        assert_eq!(missing_tools(&find("Vite + React"), &path), vec!["npm", "node"]);
+        let _ = std::fs::remove_dir_all(a);
     }
 }

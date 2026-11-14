@@ -1,10 +1,11 @@
-# Build and test on every push and pull request (Windows x64).
+# Build and test on every push and pull request: Windows x64 (the main target), plus Linux and macOS (preview).
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -17,3 +18,63 @@ jobs:
         run: cargo build --release
       - name: Test
         run: cargo test --release
+
+  # Linux and macOS (preview). The tray on Linux talks D-Bus (ksni), so no GTK is needed to build.
+  # The Intel Mac build is cross-compiled on the Apple silicon runner (as release.yml does) and only built.
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            test: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            test: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            test: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Test
+        if: matrix.test
+        run: cargo test --release --target ${{ matrix.target }}
+      # Linux: the real thing with the runner's own packages. Ninho links the system PHP, Redis and PostgreSQL into
+      # ~/Ninho, starts them as this user on its ports, sees them in the port list, and stops them.
+      - name: Smoke test (Linux, system servers)
+        if: runner.os == 'Linux'
+        run: |
+          set -x
+          B=$PWD/target/${{ matrix.target }}/release/ninho
+          sudo apt-get install -y -qq redis-server apache2 > /dev/null
+          sudo systemctl stop redis-server || true
+          mkdir -p ~/Ninho/www && echo '<?php echo "ninho-" . "ok";' > ~/Ninho/www/index.php
+          $B --install php redis postgres mysql mailpit apache
+          cat ~/Ninho/tmp/ninho-install.log
+          ls -la ~/Ninho/bin/*/*
+          $B start php redis postgres mailpit apache
+          cat ~/Ninho/bin/apache/*/conf/httpd.conf; cat ~/Ninho/bin/apache/*/logs/error.log || true
+          $B status --json | tee status.json
+          curl -fsS http://localhost:8000/ | grep ninho-ok
+          curl -fsS http://127.0.0.1:8080/ | grep ninho
+          for id in php redis postgres apache; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="running"' status.json; done
+          # MySQL is held to /var/lib/mysql by Ubuntu's AppArmor profile (Ninho says so); with the profile off, the
+          # next start makes Ninho's data folder and runs it.
+          sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld || true
+          $B start mysql
+          $B status --json | tee status.json
+          tail -n 15 ~/Ninho/data/mysql-*/mysqld.log || true
+          jq -e '.[] | select(.id=="mysql") | .state=="running"' status.json
+          ! grep -q "Can't find error-message file" ~/Ninho/data/mysql-*/mysqld.log
+          $B stop php redis postgres mailpit mysql apache
+          $B status --json | tee after.json
+          for id in php redis postgres apache mysql; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="stopped"' after.json; done

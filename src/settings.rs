@@ -117,6 +117,7 @@ impl Default for Settings {
         // Portable: the folder of ninho.exe when it holds a bin folder; else an existing local server folder; else
         // the folder of ninho.exe itself (the first "Install" creates bin there).
         let here = exe_dir();
+        #[cfg(windows)]
         let root = if here.join("bin").is_dir() {
             here.to_string_lossy().into_owned()
         } else if Path::new(r"C:\laragon\bin").is_dir() {
@@ -124,7 +125,11 @@ impl Default for Settings {
         } else {
             here.to_string_lossy().into_owned()
         };
-        let doc_root = format!(r"{root}\www");
+        // Linux and macOS: the program usually sits in a folder of programs (or Downloads), so Ninho's servers,
+        // data and sites go to ~/Ninho unless the program's folder already holds a bin folder (portable).
+        #[cfg(unix)]
+        let root = if here.join("bin").is_dir() { here.to_string_lossy().into_owned() } else { crate::platform::default_root().to_string_lossy().into_owned() };
+        let doc_root = crate::platform::join(&root, &["www"]);
         Settings {
             root,
             doc_root,
@@ -144,17 +149,37 @@ impl Default for Settings {
             check_updates: true,
             home_page: true,
         }
+        .unix_defaults()
     }
 }
 
 impl Settings {
-    /// Settings beside ninho.exe (portable).
+    /// Linux: closing the window quits by default, since not every desktop shows tray icons (GNOME needs an
+    /// extension) and a hidden window could not be brought back from there.
+    fn unix_defaults(mut self) -> Self {
+        if cfg!(target_os = "linux") {
+            self.close_to_tray = false;
+        }
+        self
+    }
+
+    /// Settings beside ninho.exe (portable). Linux and macOS: beside the program when a ninho.json is already there
+    /// (portable), else in ~/Ninho.
     pub fn file() -> PathBuf {
-        exe_dir().join("ninho.json")
+        let here = exe_dir().join("ninho.json");
+        #[cfg(unix)]
+        if !here.is_file() {
+            return crate::platform::default_root().join("ninho.json");
+        }
+        here
     }
 
     /// Where older versions kept the settings; read once while ninho.json does not exist yet.
     fn old_file() -> PathBuf {
+        if cfg!(unix) {
+            // Only old Windows versions had it.
+            return PathBuf::new();
+        }
         let base = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
         PathBuf::from(base).join("Ninho").join("settings.json")
     }
@@ -233,17 +258,7 @@ pub fn hostname_format_check(fmt: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Start Ninho with Windows (or with the Linux / macOS session), or not.
 pub fn set_run_at_startup(on: bool) {
-    let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
-    let mut cmd = std::process::Command::new("reg");
-    if on {
-        let exe = std::env::current_exe().unwrap_or_default();
-        cmd.args(["add", key, "/v", "Ninho", "/t", "REG_SZ", "/d"])
-            .arg(format!("\"{}\"", exe.display()))
-            .arg("/f");
-    } else {
-        cmd.args(["delete", key, "/v", "Ninho", "/f"]);
-    }
-    crate::services::hide_window(&mut cmd);
-    let _ = cmd.output();
+    crate::platform::set_run_at_startup(on);
 }

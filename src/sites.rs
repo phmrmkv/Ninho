@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::services::{Shared, hide_window};
+use crate::services::Shared;
 use crate::i18n::tr;
 use crate::settings::{Settings, name_ok};
 
@@ -23,7 +23,7 @@ pub fn kind(dir: &Path) -> &'static str {
         "Laravel"
     } else if has("wp-config.php") || has("wp-load.php") {
         "WordPress"
-    } else if has(r"bin\console") && has("composer.json") {
+    } else if dir.join("bin").join("console").exists() && has("composer.json") {
         "Symfony"
     } else if has("package.json") && !has("index.php") && !has("composer.json") {
         "Node.js"
@@ -135,8 +135,7 @@ fn write_confs(dir: &Path, sites: &[Site], doc_root: &str, port: u16, nginx: boo
 }
 
 fn hosts_path() -> String {
-    let win = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    format!(r"{win}\System32\drivers\etc\hosts")
+    crate::platform::hosts_path()
 }
 
 /// `127.0.0.1` + 6 spaces + host, padded to column 50, then the marker.
@@ -174,6 +173,8 @@ fn update_hosts(shared: &Arc<Shared>, s: &Settings, sites: &[Site]) {
         return;
     };
     let Some(text) = new_hosts(&current, sites) else { return };
+    // Linux and macOS write their hosts file with plain line ends.
+    let text = if cfg!(windows) { text } else { text.replace("\r\n", "\n") };
     if std::fs::write(&path, &text).is_ok() {
         shared.say(tr(lang, "log_hosts_updated"));
         return;
@@ -186,18 +187,14 @@ fn update_hosts(shared: &Arc<Shared>, s: &Settings, sites: &[Site]) {
         shared.say(tr(lang, "log_hosts_tmp_failed"));
         return;
     }
-    shared.say(tr(lang, "log_hosts_asking"));
-    let ps = format!(
-        "Start-Process -FilePath cmd -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '/c copy /y \"{}\" \"{}\"'",
-        tmp_file.display(),
-        path
-    );
-    let mut c = std::process::Command::new("powershell");
-    c.args(["-NoProfile", "-Command", &ps]);
-    hide_window(&mut c);
-    match c.output() {
-        Ok(o) if o.status.success() => shared.say(tr(lang, "log_hosts_updated")),
-        _ => shared.say(tr(lang, "log_hosts_refused")),
+    if cfg!(windows) {
+        shared.say(tr(lang, "log_hosts_asking"));
+    }
+    match crate::platform::copy_hosts_as_admin(&tmp_file, &path) {
+        Ok(true) => shared.say(tr(lang, "log_hosts_updated")),
+        Ok(false) => shared.say(tr(lang, "log_hosts_refused")),
+        // Linux and macOS: Ninho never asks for the administrator password; it shows the command instead.
+        Err(cmd) => shared.say(format!("{} {cmd}", tr(lang, "log_hosts_run"))),
     }
 }
 
@@ -210,7 +207,7 @@ pub fn refresh(shared: &Arc<Shared>, s: &Settings, verbose: bool) {
     let sites = list(s);
     let root = Path::new(&s.root);
     // HTTPS: a certificate per site, signed by Ninho's local authority (openssl from the Apache folder).
-    let openssl = crate::services::version_dir(s, "apache").map(|v| v.join("bin").join("openssl.exe")).filter(|p| p.is_file());
+    let openssl = crate::services::version_dir(s, "apache").map(|v| v.join("bin").join(crate::platform::exe("openssl"))).filter(|p| p.is_file());
     let ssl_ok = s.https && openssl.as_ref().is_some_and(|o| match crate::certs::ensure_ca(s, o) {
         Ok(_) => true,
         Err(e) => {
@@ -229,9 +226,9 @@ pub fn refresh(shared: &Arc<Shared>, s: &Settings, verbose: bool) {
         }
     };
     let ssl: Option<&dyn Fn(&str, &str) -> Option<String>> = if ssl_ok { Some(&make_ssl) } else { None };
-    let a = write_confs(&root.join(r"etc\apache2\sites-enabled"), &sites, &s.doc_root, s.svc("apache").port, false, ssl);
+    let a = write_confs(&root.join("etc").join("apache2").join("sites-enabled"), &sites, &s.doc_root, s.svc("apache").port, false, ssl);
     let n = if s.svc("nginx").enabled {
-        write_confs(&root.join(r"etc\nginx\sites-enabled"), &sites, &s.doc_root, s.svc("nginx").port, true, None)
+        write_confs(&root.join("etc").join("nginx").join("sites-enabled"), &sites, &s.doc_root, s.svc("nginx").port, true, None)
     } else {
         0
     };

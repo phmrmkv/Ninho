@@ -137,6 +137,48 @@ with Windows DPAPI for your user only (no plain text, and not readable by anothe
 uses it to stop the server politely, in the database tools, in the importer and for the project database check.
 *Config > Forget remembered password* removes it from `ninho.json` (the server keeps its password).
 
+## Linux and macOS (preview)
+
+Ninho also runs on Linux (x64) and macOS (Apple silicon and Intel). This is a **preview**: the window, the Ports tab,
+the Sites tab, the logs, the command line and the MCP server are the same as on Windows; the server management works
+differently, because Linux and macOS already have good packages for every server. CI builds and tests every change on
+Ubuntu and macOS, and on Ubuntu it installs, starts and stops the system's Apache, PHP, MySQL, PostgreSQL and Redis
+plus Mailpit through Ninho's command line.
+
+1. Download `Ninho-linux-x64`, `Ninho-macos-arm64` or `Ninho-macos-x64` from the [latest release](https://github.com/phmrmkv/Ninho/releases/latest),
+   run `chmod +x` on it and open it (on macOS, right-click > *Open* the first time: the program is not notarized).
+2. Ninho keeps its servers' settings, data, sites and logs in `~/Ninho` (`~/Ninho/www` for the sites,
+   `~/Ninho/ninho.json` for the settings), unless the program sits in a folder that already has a `bin` folder.
+3. Install the servers you want with your package manager, for example:
+
+   ```bash
+   sudo apt install apache2 libapache2-mod-php php-cli php-mysql mariadb-server redis-server   # Debian, Ubuntu
+   sudo dnf install httpd php php-cli php-mysqlnd mariadb-server valkey                        # Fedora
+   brew install httpd php mariadb redis                                                        # macOS
+   ```
+
+4. In **Download and update**, *Install* uses the program already on the computer: Ninho links it into
+   `~/Ninho/bin/<kind>/<kind>-<version>-system` and runs it **as you**, with its own config file, data folder,
+   sockets (in the temporary folder) and logs. The system's own service, config in `/etc` and data in `/var/lib`
+   are not touched. What is missing shows the command that installs it. Mailpit and Node.js are downloaded from their
+   official sites, as on Windows.
+
+What is different from Windows:
+
+- **Ports:** servers run as your user, so Apache listens on **8080** (ports below 1024 need administrator rights).
+- **Hosts file:** Ninho never asks for your password. When `/etc/hosts` needs the `.test` names, the activity list
+  shows the `sudo` command to run.
+- **Tray:** macOS shows the icon in the menu bar. On Linux the icon uses the StatusNotifier protocol (KDE, Xfce,
+  Cinnamon, GNOME with the AppIndicator extension), and closing the window quits Ninho by default.
+- **Install on this PC:** on Linux it copies Ninho to `~/.local/share/ninho` with a menu entry; macOS runs it from
+  any folder for now.
+- **Self-update:** it downloads `Ninho-linux-x64` / `Ninho-macos-*` and checks its SHA-256, as on Windows.
+
+Not yet on Linux and macOS: Nginx, HTTPS for the `.test` sites (local certificate authority), Xdebug downloads
+(install your system's `php-xdebug` package), the PHP extension switches (the system PHP keeps its own `php.ini`;
+use your package manager), importing from XAMPP / WampServer / Laragon, and MySQL on Ubuntu when its AppArmor profile only allows
+`/var/lib/mysql` (use MariaDB, or `sudo aa-complain /usr/sbin/mysqld`).
+
 ## Use Ninho from AI agents (MCP)
 
 Ninho ships a Model Context Protocol server, so coding agents such as Claude Code or Cursor can see and control your
@@ -165,7 +207,8 @@ cd Ninho
 cargo build --release
 ```
 
-Needs Rust (stable). The window and exe icons come from `assets/ninho.svg`; after changing it run
+Needs Rust (stable). On Linux and macOS the same command builds the preview; nothing else is needed to build (the
+Linux tray uses D-Bus, not GTK). The window and exe icons come from `assets/ninho.svg`; after changing it run
 `node build-icons.cjs assets` (needs the `sharp` package).
 
 ## FAQ
@@ -188,7 +231,8 @@ is no way back.
 
 **32-bit Windows?** Use `Ninho-x86.exe`. PHP, Apache, Mailpit, Node.js (up to 22) and cloudflared have 32-bit builds; MySQL 8.4, MariaDB, PostgreSQL, MongoDB, Caddy and Redis don't, and Ninho tells you so.
 
-**Linux or macOS?** Not yet: see the [roadmap](ROADMAP.md). Ninho's window already runs there; the server management is Windows-only for now.
+**Linux or macOS?** Yes, as a preview: see [Linux and macOS (preview)](#linux-and-macos-preview). Ninho runs the
+servers your package manager installed (Mailpit and Node.js are downloaded), with its own settings, data and ports.
 
 **Can I translate Ninho?** Yes: copy `locales/en.json` to `locales/<your-language>.json`, translate the values and open a pull request.
 
@@ -236,6 +280,13 @@ Vindo do XAMPP ou do WampServer? Na primeira vez, ou depois pelo menu, o Ninho o
 
 Vindo do Laragon? Coloque o `Ninho.exe` em `C:\laragon`: as pastas `bin`, `data\mysql-8.4` e `www` são usadas como
 estão.
+
+**Linux e macOS (prévia):** baixe `Ninho-linux-x64`, `Ninho-macos-arm64` ou `Ninho-macos-x64`, dê `chmod +x` e abra.
+Os servidores vêm do gerenciador de pacotes (`apt`, `dnf`, Homebrew): o *Instalar* usa o que já está no computador e
+roda com o seu usuário, com configuração, dados e logs do próprio Ninho em `~/Ninho`. Mailpit e Node.js são baixados
+dos sites oficiais. O Apache fica na porta 8080 (portas abaixo de 1024 pedem administrador) e o Ninho não pede senha:
+quando o `/etc/hosts` precisa mudar, a atividade mostra o comando `sudo`. Detalhes em
+[Linux and macOS (preview)](#linux-and-macos-preview).
 
 ## Code signing policy
 

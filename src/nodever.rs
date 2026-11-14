@@ -4,7 +4,39 @@
 use std::path::{Path, PathBuf};
 
 /// "win-x64", or "win-x86" when Ninho is built as 32-bit (Node.js has 32-bit Windows builds up to version 22).
-const ARCH: &str = if cfg!(target_arch = "x86") { "win-x86" } else { "win-x64" };
+#[cfg(windows)]
+pub const ARCH: &str = if cfg!(target_arch = "x86") { "win-x86" } else { "win-x64" };
+/// Linux and macOS (preview): the official builds for this system and processor.
+#[cfg(target_os = "linux")]
+pub const ARCH: &str = if cfg!(target_arch = "aarch64") { "linux-arm64" } else { "linux-x64" };
+#[cfg(target_os = "macos")]
+pub const ARCH: &str = if cfg!(target_arch = "aarch64") { "darwin-arm64" } else { "darwin-x64" };
+
+/// The archive nodejs.org has for this system: ZIP on Windows, tar.gz on Linux and macOS.
+pub const ARCHIVE: &str = if cfg!(windows) { "zip" } else { "tar.gz" };
+
+/// How index.json names this build in "files": "win-x64-zip", "linux-x64", "osx-arm64-tar".
+pub fn index_key() -> String {
+    if cfg!(windows) {
+        format!("{ARCH}-zip")
+    } else if cfg!(target_os = "macos") {
+        format!("{}-tar", ARCH.replace("darwin", "osx"))
+    } else {
+        ARCH.to_string()
+    }
+}
+
+/// Linux and macOS: the archive keeps node, npm and npx in bin/; links at the top of the version folder make it
+/// look like the Windows one (node beside the folder name), so PATH and the checks are the same everywhere.
+#[cfg(unix)]
+pub fn link_bins(d: &Path) {
+    for b in ["node", "npm", "npx", "corepack"] {
+        let target = Path::new("bin").join(b);
+        if d.join(&target).exists() && !d.join(b).exists() {
+            let _ = std::os::unix::fs::symlink(&target, d.join(b));
+        }
+    }
+}
 use std::process::Command;
 use std::time::Duration;
 
@@ -15,12 +47,6 @@ use crate::settings::Settings;
 
 /// How many LTS lines `available()` offers (older ones are end of life).
 const LTS_LINES: usize = 4;
-
-fn win(tool: &str) -> PathBuf {
-    // Windows' own curl and tar (Git's tar cannot open ZIP files).
-    let sys = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&sys).join("System32").join(tool)
-}
 
 fn nodejs_dir(s: &Settings) -> PathBuf {
     Path::new(&s.root).join("bin").join("nodejs")
@@ -46,7 +72,7 @@ fn parse_index(text: &[u8]) -> Result<Vec<(String, String, bool)>, String> {
     // Only releases that have a Windows x64 ZIP (very old ones and some odd builds do not).
     let mut rel: Vec<(String, String)> = all
         .iter()
-        .filter(|r| r["files"].as_array().is_some_and(|f| f.iter().any(|x| x.as_str() == Some(format!("{ARCH}-zip").as_str()))))
+        .filter(|r| r["files"].as_array().is_some_and(|f| f.iter().any(|x| x.as_str() == Some(index_key().as_str()))))
         .filter_map(|r| {
             let ver = r["version"].as_str()?.trim_start_matches('v').to_string();
             if is_prerelease(&ver) {
@@ -79,7 +105,7 @@ fn parse_index(text: &[u8]) -> Result<Vec<(String, String, bool)>, String> {
 /// (version like "24.11.0", lts codename or "", is_current).
 pub fn available() -> Result<Vec<(String, String, bool)>, String> {
     let url = "https://nodejs.org/dist/index.json";
-    let mut c = Command::new(win("curl.exe"));
+    let mut c = Command::new(crate::platform::curl());
     c.args(["-L", "-f", "-s", "-S", "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Ninho", url]);
     hide_window(&mut c);
     let out = c.output().map_err(|e| e.to_string())?;
@@ -102,7 +128,7 @@ pub fn installed(s: &Settings) -> Vec<String> {
     let mut v: Vec<String> = std::fs::read_dir(nodejs_dir(s))
         .map(|rd| {
             rd.filter_map(|e| e.ok())
-                .filter(|e| e.path().join("node.exe").is_file())
+                .filter(|e| e.path().join(crate::platform::exe("node")).is_file())
                 .filter_map(|e| folder_version(&e.file_name().to_string_lossy()).map(str::to_string))
                 .collect()
         })
@@ -114,7 +140,7 @@ pub fn installed(s: &Settings) -> Vec<String> {
 /// Folder of an installed version, to put first on a project's PATH.
 pub fn dir_of(s: &Settings, version: &str) -> Option<PathBuf> {
     let d = nodejs_dir(s).join(format!("node-v{}-{ARCH}", version.trim_start_matches('v')));
-    d.join("node.exe").is_file().then_some(d)
+    d.join(crate::platform::exe("node")).is_file().then_some(d)
 }
 
 // ---------- install ----------
@@ -140,13 +166,13 @@ pub fn install(s: &Settings, shared: &Shared, version: &str) -> Result<PathBuf, 
 fn install_inner(s: &Settings, shared: &Shared, version: &str, id: &str) -> Result<PathBuf, String> {
     let lang = s.language;
     let name = format!("node-v{version}-{ARCH}");
-    let url = format!("https://nodejs.org/dist/v{version}/{name}.zip");
-    let tmp = Path::new(&s.root).join(r"tmp\ninho-downloads");
+    let url = format!("https://nodejs.org/dist/v{version}/{name}.{ARCHIVE}");
+    let tmp = Path::new(&s.root).join("tmp").join("ninho-downloads");
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
-    let zip = tmp.join(format!("{name}.zip"));
+    let zip = tmp.join(format!("{name}.{ARCHIVE}"));
     shared.say(format!("Node.js {version}: {} {url}", tr(lang, "log_downloading")));
 
-    let mut c = Command::new(win("curl.exe"));
+    let mut c = Command::new(crate::platform::curl());
     c.args(["-L", "-f", "-s", "-S", "--retry", "2", "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Ninho"]);
     c.arg("-o").arg(&zip).arg(&url);
     hide_window(&mut c);
@@ -167,7 +193,7 @@ fn install_inner(s: &Settings, shared: &Shared, version: &str, id: &str) -> Resu
     shared.installing.lock().unwrap().insert(id.into(), "unpacking".into());
     let kind = nodejs_dir(s);
     std::fs::create_dir_all(&kind).map_err(|e| e.to_string())?;
-    let mut c = Command::new(win("tar.exe"));
+    let mut c = Command::new(crate::platform::tar());
     c.arg("-xf").arg(&zip).arg("-C").arg(&kind);
     hide_window(&mut c);
     let out = c.output().map_err(|e| e.to_string())?;
@@ -176,7 +202,9 @@ fn install_inner(s: &Settings, shared: &Shared, version: &str, id: &str) -> Resu
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
     let d = kind.join(&name);
-    if !d.join("node.exe").is_file() {
+    #[cfg(unix)]
+    link_bins(&d);
+    if !d.join(crate::platform::exe("node")).is_file() {
         return Err(format!("{} {name}", tr(lang, "log_node_exe_missing")));
     }
     shared.say(format!("Node.js {version}: {} {}", tr(lang, "log_installed_in"), d.display()));
@@ -279,9 +307,15 @@ mod tests {
       {"version":"v18.20.7","date":"2026-02-01","files":["win-x64-zip"],"lts":"Hydrogen"}
     ]"#;
 
+    /// The fixtures are written with the Windows names; on Linux and macOS this system's build takes their place
+    /// (and the "other system" build stays another one).
+    fn here(index: &str) -> String {
+        index.replace("linux-x64", "other-x64").replace("win-x64-zip", &index_key())
+    }
+
     #[test]
     fn index_gives_newest_per_line_and_current() {
-        let a = parse_index(INDEX.as_bytes()).unwrap();
+        let a = parse_index(here(INDEX).as_bytes()).unwrap();
         assert_eq!(
             a,
             vec![
@@ -296,7 +330,7 @@ mod tests {
 
     #[test]
     fn index_skips_releases_without_a_windows_zip_and_marks_lts_that_is_newest() {
-        let a = parse_index(br#"[{"version":"v26.0.0","files":["win-x64-zip"],"lts":"Next"},{"version":"v25.9.0","files":["linux-x64"],"lts":false}]"#).unwrap();
+        let a = parse_index(here(r#"[{"version":"v26.0.0","files":["win-x64-zip"],"lts":"Next"},{"version":"v25.9.0","files":["linux-x64"],"lts":false}]"#).as_bytes()).unwrap();
         assert_eq!(a, vec![("26.0.0".to_string(), "Next".to_string(), true)]);
         assert!(parse_index(b"[]").is_err());
         assert!(parse_index(b"nope").is_err());
@@ -347,8 +381,8 @@ mod tests {
 
     #[test]
     fn folder_names_and_project_file() {
-        assert_eq!(folder_version("node-v26.13.1-win-x64"), Some("26.13.1"));
-        assert_eq!(folder_version("node-v26.13.1-win-x64.zip"), None);
+        assert_eq!(folder_version(&format!("node-v26.13.1-{ARCH}")), Some("26.13.1"));
+        assert_eq!(folder_version(&format!("node-v26.13.1-{ARCH}.zip")), None);
         assert_eq!(folder_version("npm"), None);
         let d = std::env::temp_dir().join(format!("nodever-test-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();

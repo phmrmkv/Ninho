@@ -7,6 +7,7 @@
 - Caddy as a web server beside Apache and Nginx (port 2015, plain HTTP, only this PC): Ninho writes `etc\caddy\Caddyfile` with every `www` folder as `<name>.test` and starts a few php-cgi workers for PHP. Downloaded from GitHub (caddyserver/caddy).
 - Ports tab: containers of a running Docker show as `Docker: name (image)` instead of `com.docker.backend.exe`, with a *Stop container* button (`docker stop`, asks first). Docker is only asked while the tab is open; no Docker, no change.
 - 9 new texts in the 18 languages.
+- Linux and macOS preview: Ninho builds and runs there (`Ninho-linux-x64`, `Ninho-macos-arm64`, `Ninho-macos-x64`). Apache, PHP, MySQL, MariaDB, PostgreSQL, Redis and Memcached come from the package manager and run as the user with Ninho's own settings, data and ports (Apache on 8080); Mailpit and Node.js are downloaded. Windows is unchanged.
 
 ## 0.6.2 — 2026-11-13
 - A UX review of every screen: nothing cut off at the smallest window size, the same words for the same action, no exclamation marks, buttons all in the same three sizes.
