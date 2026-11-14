@@ -373,5 +373,14 @@
   "sites_count_one": "Site",
   "sites_count_many": "Sites",
   "create_db_go": "Datenbank erstellen",
-  "import_none_here": "In diesem Ordner gibt es nichts zu importieren."
+  "import_none_here": "In diesem Ordner gibt es nichts zu importieren.",
+  "log_no_mongosh": "Die MongoDB Shell (mongosh) fehlt: unter Herunterladen und aktualisieren holen.",
+  "log_mongo_no_shell": "mongosh fehlt, deshalb wird MongoDB direkt beendet (es schreibt ein Journal, nichts geht verloren). Mit mongosh geht es sauber herunter.",
+  "log_caddy_conf_failed": "konnte das Caddyfile nicht schreiben:",
+  "log_caddy_no_php": "PHP hat keine php-cgi.exe, daher laufen .php-Dateien in Caddy nicht.",
+  "log_caddy_php_failed": "konnte php-cgi nicht starten:",
+  "stop_container": "Container stoppen",
+  "stop_container_text": "Den Docker-Container {name} ({image}) stoppen, der Port {ports} veröffentlicht? Er wird mit docker stop gestoppt; Container und Daten bleiben erhalten.",
+  "log_container_stopped": "Container gestoppt:",
+  "log_container_stop_failed": "Container konnte nicht gestoppt werden"
 }

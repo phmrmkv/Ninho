@@ -373,5 +373,14 @@
   "sites_count_one": "trang",
   "sites_count_many": "trang",
   "create_db_go": "Tạo cơ sở dữ liệu",
-  "import_none_here": "Không có gì để nhập trong thư mục đó."
+  "import_none_here": "Không có gì để nhập trong thư mục đó.",
+  "log_no_mongosh": "Thiếu MongoDB Shell (mongosh): hãy tải trong Tải xuống và cập nhật.",
+  "log_mongo_no_shell": "Thiếu mongosh nên MongoDB được kết thúc trực tiếp (nó ghi nhật ký các lần ghi, không mất gì). Hãy tải mongosh để dừng êm.",
+  "log_caddy_conf_failed": "không ghi được Caddyfile:",
+  "log_caddy_no_php": "PHP không có php-cgi.exe nên các tệp .php không chạy trong Caddy.",
+  "log_caddy_php_failed": "không khởi động được php-cgi:",
+  "stop_container": "Dừng container",
+  "stop_container_text": "Dừng container Docker {name} ({image}) đang mở cổng {ports}? Nó được dừng bằng docker stop; container và dữ liệu vẫn được giữ.",
+  "log_container_stopped": "Đã dừng container:",
+  "log_container_stop_failed": "Không dừng được container"
 }

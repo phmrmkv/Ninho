@@ -27,6 +27,8 @@ pub const SERVICES: &[ServiceDef] = &[
     ServiceDef { key: "apache", name: "Apache", dir: "apache", exe: r"bin\httpd.exe", default_port: 80, default_on: true, multi: false },
     ServiceDef { key: "mysql", name: "MySQL", dir: "mysql", exe: r"bin\mysqld.exe", default_port: 3306, default_on: true, multi: true },
     ServiceDef { key: "nginx", name: "Nginx", dir: "nginx", exe: "nginx.exe", default_port: 8080, default_on: false, multi: false },
+    // 2015 (Caddy's classic port): Apache keeps 80.
+    ServiceDef { key: "caddy", name: "Caddy", dir: "caddy", exe: "caddy.exe", default_port: 2015, default_on: false, multi: false },
     ServiceDef { key: "redis", name: "Redis", dir: "redis", exe: "redis-server.exe", default_port: 6379, default_on: false, multi: true },
     ServiceDef { key: "memcached", name: "Memcached", dir: "memcached", exe: "memcached.exe", default_port: 11211, default_on: false, multi: true },
     ServiceDef { key: "php", name: "PHP Server", dir: "php", exe: "php.exe", default_port: 8000, default_on: false, multi: true },
@@ -34,6 +36,7 @@ pub const SERVICES: &[ServiceDef] = &[
     ServiceDef { key: "postgres", name: "PostgreSQL", dir: "postgresql", exe: r"bin\postgres.exe", default_port: 5432, default_on: false, multi: true },
     // 3307 so it runs beside MySQL (3306).
     ServiceDef { key: "mariadb", name: "MariaDB", dir: "mariadb", exe: r"bin\mariadbd.exe", default_port: 3307, default_on: false, multi: true },
+    ServiceDef { key: "mongodb", name: "MongoDB", dir: "mongodb", exe: r"bin\mongod.exe", default_port: 27017, default_on: false, multi: true },
 ];
 
 /// Mailpit's own web page port (estimated: Mailpit's default). An extra Mailpit uses its SMTP port + 7000.
@@ -145,6 +148,17 @@ pub struct Shared {
     pub latest: Mutex<HashMap<String, Result<String, String>>>,
     /// Tools a download just installed ("redis"...): the window turns their server on in Modules.
     pub just_installed: Mutex<Vec<String>>,
+    /// Running Docker containers (empty without Docker), read by the watcher while the Ports tab is open.
+    pub containers: Mutex<Vec<crate::docker::Container>>,
+    /// When the Ports tab last drew (seconds since the epoch): Docker is only asked while someone looks.
+    pub ports_seen: std::sync::atomic::AtomicU64,
+    /// Seconds since the epoch of the last `docker ps`, and whether one is running now.
+    pub docker_last: std::sync::atomic::AtomicU64,
+    pub docker_busy: std::sync::atomic::AtomicBool,
+}
+
+fn epoch_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 impl Shared {
@@ -160,6 +174,10 @@ impl Shared {
             installing: Mutex::new(HashMap::new()),
             latest: Mutex::new(HashMap::new()),
             just_installed: Mutex::new(Vec::new()),
+            containers: Mutex::new(Vec::new()),
+            ports_seen: std::sync::atomic::AtomicU64::new(0),
+            docker_last: std::sync::atomic::AtomicU64::new(0),
+            docker_busy: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -188,6 +206,37 @@ impl Shared {
         self.state.lock().unwrap().insert(id.into(), st);
     }
 
+    /// The Ports tab is on screen: Docker is asked for a while (see refresh_docker).
+    pub fn ports_seen_now(self: &Arc<Self>) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let first = epoch_secs().saturating_sub(self.ports_seen.load(Relaxed)) > 15;
+        self.ports_seen.store(epoch_secs(), Relaxed);
+        if first {
+            self.refresh_docker(true);
+        }
+    }
+
+    /// Ask Docker which containers run, on a thread of its own (a stopped daemon can take seconds to answer). Only
+    /// while the Ports tab was drawn in the last 15 seconds, and at most every 4 seconds, unless `force`. Without
+    /// Docker the answer is an empty list and nothing is said.
+    pub fn refresh_docker(self: &Arc<Self>, force: bool) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let now = epoch_secs();
+        if !force && (now.saturating_sub(self.ports_seen.load(Relaxed)) > 15 || now.saturating_sub(self.docker_last.load(Relaxed)) < 4) {
+            return;
+        }
+        if self.docker_busy.swap(true, Relaxed) {
+            return;
+        }
+        self.docker_last.store(now, Relaxed);
+        let me = self.clone();
+        std::thread::spawn(move || {
+            let list = crate::docker::running();
+            *me.containers.lock().unwrap() = list;
+            me.docker_busy.store(false, Relaxed);
+        });
+    }
+
     /// Look at the ports again now (after a start or stop).
     pub fn refresh(&self) {
         let list = ports::listening();
@@ -211,6 +260,7 @@ pub fn spawn_watcher(shared: Arc<Shared>, ctx: eframe::egui::Context) {
         // A program we started that has exited is no longer ours.
         shared.children.lock().unwrap().retain(|_, c| !matches!(c.try_wait(), Ok(Some(_))));
         shared.refresh();
+        shared.refresh_docker(false);
         ctx.request_repaint();
         std::thread::sleep(Duration::from_millis(2000));
     });
@@ -245,14 +295,17 @@ pub fn mysql_data(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Option<String> {
     }
 }
 
-/// Data folder of PostgreSQL / MariaDB: its own for an extra server, else <root>/data/postgresql-<major> or
-/// mariadb-<major.minor> (one per series: a newer patch version opens the same data).
+/// Data folder of PostgreSQL / MariaDB / MongoDB: its own for an extra server, else <root>/data/postgresql-<major> or
+/// mariadb-<major.minor> (one per series: a newer patch version opens the same data); <root>/data/mongodb for MongoDB.
 pub fn engine_data(s: &Settings, c: &ServiceCfg, vdir: &Path) -> String {
     if c.is_extra() && !c.data_dir.is_empty() {
         return c.data_dir.clone();
     }
     if c.is_extra() {
         return Path::new(&s.root).join("data").join(&c.id).to_string_lossy().into_owned();
+    }
+    if c.key == "mongodb" {
+        return Path::new(&s.root).join("data").join("mongodb").to_string_lossy().into_owned();
     }
     let folder = vdir.file_name().unwrap_or_default().to_string_lossy().into_owned();
     let nums: Vec<&str> = folder.split(|ch: char| !ch.is_ascii_digit()).filter(|x| !x.is_empty()).collect();
@@ -502,6 +555,23 @@ fn build_command(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Command {
             cmd.arg(format!("--port={port}")).arg("--bind-address=127.0.0.1");
             cmd.arg(format!("--log-error={}", Path::new(&data).join("mariadb.log").display()));
         }
+        "mongodb" => {
+            // Its own data folder, only this PC; the log is a file in the data folder (mongod.log).
+            let data = engine_data(s, c, vdir);
+            cmd.args(crate::mongo::server_args(&data, port));
+        }
+        "caddy" => {
+            // The Caddyfile is written before the start; Caddy's messages go to etc\caddy\caddy.log.
+            cmd.args(crate::caddy::run_args(&crate::caddy::caddyfile_path(&s.root)));
+            cmd.stdin(Stdio::null()).stdout(Stdio::null());
+            let log = crate::caddy::log_path(&s.root);
+            match std::fs::OpenOptions::new().create(true).append(true).open(log) {
+                Ok(f) => cmd.stderr(Stdio::from(f)),
+                Err(_) => cmd.stderr(Stdio::null()),
+            };
+            hide_window(&mut cmd);
+            return cmd;
+        }
         "redis" => {
             if vdir.join("redis.windows.conf").is_file() {
                 cmd.arg("redis.windows.conf");
@@ -575,6 +645,18 @@ pub fn start(shared: &Arc<Shared>, s: &Settings, id: &str) {
     if c.key == "nginx" {
         crate::sites::refresh(shared, s, false);
     }
+    if c.key == "mongodb" {
+        // mongod does not make its data folder.
+        if let Err(e) = std::fs::create_dir_all(engine_data(s, &c, &vdir)) {
+            shared.say(format!("MongoDB: {} {e}", tr(lang, "log_data_create_failed")));
+            shared.set_busy(id, false);
+            return;
+        }
+    }
+    if c.key == "caddy" {
+        crate::sites::refresh(shared, s, false);
+        crate::caddy::prepare(shared, s);
+    }
     let mut cmd = build_command(s, &c, &vdir);
     match cmd.spawn() {
         Ok(child) => {
@@ -616,6 +698,7 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
             hide_window(&mut cmd);
             let _ = cmd.output();
         }
+        ("caddy", Some(v)) => crate::caddy::polite_stop(&v.join("caddy.exe")),
         ("mariadb", Some(v)) => {
             let mut cmd = Command::new(v.join("bin").join("mariadb-admin.exe"));
             cmd.args(["--no-defaults", "-h", "127.0.0.1", "-P", &port.to_string(), "-u", "root", "shutdown"]);
@@ -630,7 +713,12 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
         }
         _ => {}
     }
-    let polite = matches!(c.key.as_str(), "nginx" | "mysql" | "postgres" | "mariadb") && wait_port(port, false, Duration::from_secs(8));
+    // MongoDB: through mongosh when it is installed; without it the program is simply ended (it journals its writes).
+    let mongo_shell = c.key == "mongodb" && crate::mongo::shutdown(&s.root, port);
+    if c.key == "mongodb" && !mongo_shell {
+        shared.say(format!("MongoDB: {}", tr(lang, "log_mongo_no_shell")));
+    }
+    let polite = (matches!(c.key.as_str(), "nginx" | "mysql" | "postgres" | "mariadb" | "caddy") || mongo_shell) && wait_port(port, false, Duration::from_secs(8));
     if !polite {
         if c.key == "mysql" {
             shared.say(tr(lang, "log_mysql_force_stop"));
@@ -655,6 +743,9 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
     }
     if let Some(mut ch) = child {
         let _ = ch.wait();
+    }
+    if c.key == "caddy" {
+        crate::caddy::stop_helpers(shared);
     }
     wait_port(port, false, Duration::from_secs(4));
     shared.refresh();
@@ -711,6 +802,7 @@ pub fn config_file(s: &Settings, id: &str) -> Option<PathBuf> {
         "redis" => v.join("redis.windows.conf"),
         "postgres" => PathBuf::from(engine_data(s, s.svc(id), &v)).join("postgresql.conf"),
         "mariadb" => PathBuf::from(engine_data(s, s.svc(id), &v)).join("my.ini"),
+        "caddy" => crate::caddy::caddyfile_path(&s.root),
         _ => return None,
     };
     f.is_file().then_some(f)
@@ -726,6 +818,8 @@ pub fn log_file(s: &Settings, id: &str) -> Option<PathBuf> {
         "mailpit" => v.join(format!("{}.log", c.id)),
         "postgres" => PathBuf::from(engine_data(s, c, &v)).join("postgres.log"),
         "mariadb" => PathBuf::from(engine_data(s, c, &v)).join("mariadb.log"),
+        "mongodb" => PathBuf::from(engine_data(s, c, &v)).join("mongod.log"),
+        "caddy" => crate::caddy::log_path(&s.root),
         _ => return None,
     };
     f.is_file().then_some(f)
@@ -742,13 +836,18 @@ pub fn pids(shared: &Shared, s: &Settings, id: &str) -> Vec<u32> {
 
 pub fn tool_path(s: &Settings) -> String {
     let mut parts: Vec<String> = Vec::new();
-    for key in ["php", "apache", "nginx", "redis"] {
+    for key in ["php", "apache", "nginx", "caddy", "redis"] {
         if let Some(v) = version_dir(s, key) {
             parts.push(v.to_string_lossy().into_owned());
         }
     }
-    if let Some(v) = version_dir(s, "mysql") {
-        parts.push(v.join("bin").to_string_lossy().into_owned());
+    for key in ["mysql", "mongodb"] {
+        if let Some(v) = version_dir(s, key) {
+            parts.push(v.join("bin").to_string_lossy().into_owned());
+        }
+    }
+    if let Some(sh) = crate::mongo::mongosh_exe(&s.root).and_then(|p| p.parent().map(Path::to_path_buf)) {
+        parts.push(sh.to_string_lossy().into_owned());
     }
     for extra in [r"bin\composer", r"bin\git\cmd", r"bin\git\bin"] {
         let p = Path::new(&s.root).join(extra);

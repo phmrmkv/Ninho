@@ -373,5 +373,14 @@
   "sites_count_one": "사이트",
   "sites_count_many": "사이트",
   "create_db_go": "데이터베이스 만들기",
-  "import_none_here": "그 폴더에는 가져올 것이 없습니다."
+  "import_none_here": "그 폴더에는 가져올 것이 없습니다.",
+  "log_no_mongosh": "MongoDB Shell(mongosh)이 없습니다. \"다운로드 및 업데이트\"에서 받으세요.",
+  "log_mongo_no_shell": "mongosh가 없어서 MongoDB를 바로 종료합니다(쓰기는 저널에 남으므로 손실이 없습니다). 깔끔하게 종료하려면 mongosh를 받으세요.",
+  "log_caddy_conf_failed": "Caddyfile을 쓸 수 없습니다:",
+  "log_caddy_no_php": "PHP에 php-cgi.exe가 없어서 Caddy에서 .php 파일이 실행되지 않습니다.",
+  "log_caddy_php_failed": "php-cgi를 시작할 수 없습니다:",
+  "stop_container": "컨테이너 중지",
+  "stop_container_text": "포트 {ports}을(를) 게시하는 Docker 컨테이너 {name}({image})을(를) 중지할까요? docker stop으로 중지하며 컨테이너와 데이터는 유지됩니다.",
+  "log_container_stopped": "컨테이너 중지됨:",
+  "log_container_stop_failed": "컨테이너를 중지할 수 없습니다"
 }

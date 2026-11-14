@@ -373,5 +373,14 @@
   "sites_count_one": "sitio",
   "sites_count_many": "sitios",
   "create_db_go": "Crear base de datos",
-  "import_none_here": "No hay nada que importar en esa carpeta."
+  "import_none_here": "No hay nada que importar en esa carpeta.",
+  "log_no_mongosh": "Falta MongoDB Shell (mongosh): descárgalo en Descargar y actualizar.",
+  "log_mongo_no_shell": "Falta mongosh, así que MongoDB se cierra directamente (escribe un diario, no se pierde nada). Descarga mongosh para una parada limpia.",
+  "log_caddy_conf_failed": "no se pudo escribir el Caddyfile:",
+  "log_caddy_no_php": "PHP no tiene php-cgi.exe, así que los archivos .php no se ejecutan en Caddy.",
+  "log_caddy_php_failed": "no se pudo iniciar php-cgi:",
+  "stop_container": "Detener contenedor",
+  "stop_container_text": "¿Detener el contenedor Docker {name} ({image}), que publica el/los puerto(s) {ports}? Se detiene con docker stop; el contenedor y sus datos se conservan.",
+  "log_container_stopped": "Contenedor detenido:",
+  "log_container_stop_failed": "No se pudo detener el contenedor"
 }

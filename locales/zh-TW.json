@@ -373,5 +373,14 @@
   "sites_count_one": "個網站",
   "sites_count_many": "個網站",
   "create_db_go": "建立資料庫",
-  "import_none_here": "該資料夾中沒有可匯入的內容。"
+  "import_none_here": "該資料夾中沒有可匯入的內容。",
+  "log_no_mongosh": "缺少 MongoDB Shell(mongosh):請在「下載與更新」中取得。",
+  "log_mongo_no_shell": "缺少 mongosh,因此直接結束 MongoDB(它會寫入日誌,不會遺失資料)。取得 mongosh 即可平穩停止。",
+  "log_caddy_conf_failed": "無法寫入 Caddyfile:",
+  "log_caddy_no_php": "PHP 沒有 php-cgi.exe,所以 .php 檔案無法在 Caddy 中執行。",
+  "log_caddy_php_failed": "無法啟動 php-cgi:",
+  "stop_container": "停止容器",
+  "stop_container_text": "要停止發布連接埠 {ports} 的 Docker 容器 {name}({image})嗎?它會用 docker stop 停止;容器及其資料會保留。",
+  "log_container_stopped": "容器已停止:",
+  "log_container_stop_failed": "無法停止容器"
 }

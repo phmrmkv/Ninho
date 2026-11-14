@@ -373,5 +373,14 @@
   "sites_count_one": "个站点",
   "sites_count_many": "个站点",
   "create_db_go": "创建数据库",
-  "import_none_here": "该文件夹中没有可导入的内容。"
+  "import_none_here": "该文件夹中没有可导入的内容。",
+  "log_no_mongosh": "缺少 MongoDB Shell(mongosh):请在“下载和更新”中获取。",
+  "log_mongo_no_shell": "缺少 mongosh,因此直接结束 MongoDB(它会写日志,不会丢数据)。获取 mongosh 可以平稳停止。",
+  "log_caddy_conf_failed": "无法写入 Caddyfile:",
+  "log_caddy_no_php": "PHP 没有 php-cgi.exe,所以 .php 文件无法在 Caddy 中运行。",
+  "log_caddy_php_failed": "无法启动 php-cgi:",
+  "stop_container": "停止容器",
+  "stop_container_text": "停止发布端口 {ports} 的 Docker 容器 {name}({image})吗?它将用 docker stop 停止;容器及其数据会保留。",
+  "log_container_stopped": "容器已停止:",
+  "log_container_stop_failed": "无法停止容器"
 }

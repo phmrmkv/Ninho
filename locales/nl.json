@@ -373,5 +373,14 @@
   "sites_count_one": "site",
   "sites_count_many": "sites",
   "create_db_go": "Database maken",
-  "import_none_here": "Er is niets te importeren in die map."
+  "import_none_here": "Er is niets te importeren in die map.",
+  "log_no_mongosh": "MongoDB Shell (mongosh) ontbreekt: haal het op via Downloaden en bijwerken.",
+  "log_mongo_no_shell": "mongosh ontbreekt, dus MongoDB wordt direct beëindigd (het houdt een journaal bij, er gaat niets verloren). Haal mongosh voor een nette stop.",
+  "log_caddy_conf_failed": "kon het Caddyfile niet schrijven:",
+  "log_caddy_no_php": "PHP heeft geen php-cgi.exe, dus .php-bestanden draaien niet in Caddy.",
+  "log_caddy_php_failed": "kon php-cgi niet starten:",
+  "stop_container": "Container stoppen",
+  "stop_container_text": "De Docker-container {name} ({image}) stoppen, die poort(en) {ports} publiceert? Hij wordt gestopt met docker stop; de container en zijn gegevens blijven bestaan.",
+  "log_container_stopped": "Container gestopt:",
+  "log_container_stop_failed": "Kon de container niet stoppen"
 }

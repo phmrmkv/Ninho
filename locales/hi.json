@@ -373,5 +373,14 @@
   "sites_count_one": "साइट",
   "sites_count_many": "साइटें",
   "create_db_go": "डेटाबेस बनाएँ",
-  "import_none_here": "उस फ़ोल्डर में आयात करने के लिए कुछ नहीं है।"
+  "import_none_here": "उस फ़ोल्डर में आयात करने के लिए कुछ नहीं है।",
+  "log_no_mongosh": "MongoDB Shell (mongosh) नहीं है: इसे \"डाउनलोड और अपडेट\" से लें।",
+  "log_mongo_no_shell": "mongosh नहीं है, इसलिए MongoDB को सीधे बंद किया जाता है (वह अपने लेखन का जर्नल रखता है, कुछ नहीं खोता)। सहज रूप से बंद करने के लिए mongosh लें।",
+  "log_caddy_conf_failed": "Caddyfile नहीं लिखी जा सकी:",
+  "log_caddy_no_php": "PHP में php-cgi.exe नहीं है, इसलिए Caddy में .php फ़ाइलें नहीं चलेंगी।",
+  "log_caddy_php_failed": "php-cgi शुरू नहीं हो सका:",
+  "stop_container": "कंटेनर रोकें",
+  "stop_container_text": "Docker कंटेनर {name} ({image}) को रोकें, जो पोर्ट {ports} प्रकाशित करता है? इसे docker stop से रोका जाता है; कंटेनर और उसका डेटा बना रहता है।",
+  "log_container_stopped": "कंटेनर रोका गया:",
+  "log_container_stop_failed": "कंटेनर रोका नहीं जा सका"
 }

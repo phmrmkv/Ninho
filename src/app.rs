@@ -9,6 +9,7 @@ use eframe::egui::{
 use crate::i18n::{Lang, tr};
 use crate::certs;
 use crate::dbtools;
+use crate::docker;
 use crate::xdebug;
 use crate::health;
 use crate::icons;
@@ -146,6 +147,8 @@ pub struct NinhoApp {
     nn_dir: String,
     nn_err: Option<String>,
     confirm_kill: Option<ports::Listener>,
+    /// Ports tab: the Docker container the person is about to stop.
+    confirm_docker: Option<docker::Container>,
     port_test: String,
     only_local: bool,
     show_updates: bool,
@@ -285,6 +288,7 @@ impl NinhoApp {
             nn_dir: String::new(),
             nn_err: None,
             confirm_kill: None,
+            confirm_docker: None,
             port_test: String::new(),
             only_local: false,
             show_updates: false,
@@ -1060,7 +1064,7 @@ impl NinhoApp {
                                 action = Some((id.clone(), if st == State::Foreign { "ports" } else { "toggle" }));
                             }
                         }
-                        let can_admin = st == State::Running && matches!(c.key.as_str(), "apache" | "nginx" | "mysql" | "mariadb" | "postgres" | "php" | "mailpit" | "redis");
+                        let can_admin = st == State::Running && matches!(c.key.as_str(), "apache" | "nginx" | "caddy" | "mysql" | "mariadb" | "postgres" | "mongodb" | "php" | "mailpit" | "redis");
                         let adm = ui.add_enabled(can_admin, small(self.t("admin"), Tone::Neutral)).on_hover_text(self.t("admin_hint"));
                         let adm = if st == State::Running { adm } else { adm.on_disabled_hover_text(self.t("admin_off_hint")) };
                         if named(adm, format!("{} {}", self.t("admin"), c.title())).clicked() {
@@ -2349,7 +2353,7 @@ impl NinhoApp {
     fn admin(&mut self, id: &str) {
         let c = self.s.svc(id).clone();
         match c.key.as_str() {
-            "apache" | "nginx" | "php" => open(&if c.port == 80 { "http://localhost".to_string() } else { format!("http://localhost:{}", c.port) }),
+            "apache" | "nginx" | "caddy" | "php" => open(&if c.port == 80 { "http://localhost".to_string() } else { format!("http://localhost:{}", c.port) }),
             "mailpit" => open(&format!("http://localhost:{}", services::mailpit_web_port(&c))),
             "redis" => {
                 if let Some(v) = services::version_dir(&self.s, id) {
@@ -2358,6 +2362,12 @@ impl NinhoApp {
                 }
             }
             "mysql" | "mariadb" => self.mysql_admin(&c),
+            "mongodb" => match crate::mongo::mongosh_exe(&self.s.root) {
+                Some(sh) => {
+                    let _ = std::process::Command::new("cmd").args(["/c", "start", "MongoDB", "cmd", "/k"]).arg(format!("\"{}\" --host 127.0.0.1 --port {}", sh.display(), c.port)).spawn();
+                }
+                None => self.shared.say(format!("MongoDB: {}", self.t("log_no_mongosh"))),
+            },
             "postgres" => {
                 if let Some(v) = services::version_dir(&self.s, id) {
                     let psql = v.join("bin").join("psql.exe");
@@ -2428,6 +2438,8 @@ impl NinhoApp {
             "apache" => &[8080, 8081],
             "mysql" => &[3307, 3308],
             "redis" => &[6380],
+            "mongodb" => &[27018],
+            "caddy" => &[2016, 8081],
             _ => &[],
         };
         usual
@@ -2452,6 +2464,9 @@ impl NinhoApp {
     /// Every port something listens on in this PC, plus the ports of this app's servers that are free.
     fn ports_view(&mut self, ui: &mut egui::Ui) {
         let list = self.shared.listeners.lock().unwrap().clone();
+        // Docker is only asked while this tab is on screen; no Docker, no containers, nothing changes below.
+        self.shared.ports_seen_now();
+        let docks = self.shared.containers.lock().unwrap().clone();
         // Port → (server id, server name, its program), to say "Ninho: MySQL" only when that program is really the one listening.
         let mine: std::collections::HashMap<u16, (String, String, String)> = self.s.services.iter().map(|c| (c.port, (c.id.clone(), c.title(), services::image(&c.key)))).collect();
         ui.horizontal(|ui| {
@@ -2493,16 +2508,22 @@ impl NinhoApp {
         ui.add_space(6.0);
         let query = self.port_filter.trim().to_lowercase();
         // One row per listener: what it is, and the server of Ninho that owns it (its stop button is the normal stop).
-        let rows: Vec<(&ports::Listener, String, Option<String>)> = list
+        let rows: Vec<(&ports::Listener, String, Option<String>, Option<docker::Container>)> = list
             .iter()
             .filter(|l| !self.only_local || l.addrs.iter().all(|a| a.starts_with("127.") || a == "[::1]"))
-            .map(|l| match mine.get(&l.port) {
-                Some((id, t, img)) if l.program.to_ascii_lowercase() == *img => (l, format!("Ninho: {t}"), Some(id.clone())),
-                Some((_, t, _)) => (l, format!("{} {t}", self.t("blocks")), None),
-                None if ports::is_system(&l.program, l.pid) => (l, "Windows".to_string(), None),
-                None => (l, ports::hint(l.port).to_string(), None),
+            .map(|l| {
+                // Docker publishes its ports through its own relay program: name the container instead.
+                let dock = if docker::is_relay(&l.program) { docker::owner(&docks, l.port).cloned() } else { None };
+                match (mine.get(&l.port), dock) {
+                    (Some((id, t, img)), None) if l.program.to_ascii_lowercase() == *img => (l, format!("Ninho: {t}"), Some(id.clone()), None),
+                    (Some((_, t, _)), None) => (l, format!("{} {t}", self.t("blocks")), None, None),
+                    (Some((_, t, _)), Some(d)) => (l, format!("{} · {} {t}", d.label(), self.t("blocks")), None, Some(d)),
+                    (None, Some(d)) => (l, d.label(), None, Some(d)),
+                    (None, None) if ports::is_system(&l.program, l.pid) => (l, "Windows".to_string(), None, None),
+                    (None, None) => (l, ports::hint(l.port).to_string(), None, None),
+                }
             })
-            .filter(|(l, who, _)| query.is_empty() || l.port.to_string().contains(&query) || l.program.to_lowercase().contains(&query) || who.to_lowercase().contains(&query))
+            .filter(|(l, who, _, _)| query.is_empty() || l.port.to_string().contains(&query) || l.program.to_lowercase().contains(&query) || who.to_lowercase().contains(&query))
             .collect();
         let mut stop_module: Option<String> = None;
         egui::ScrollArea::both().id_salt("ports").auto_shrink([false, false]).max_height((ui.available_height() - 26.0).max(100.0)).show(ui, |ui| {
@@ -2514,11 +2535,11 @@ impl NinhoApp {
                     }
                 }
                 ui.end_row();
-                for (l, who, ninho_id) in &rows {
+                for (l, who, ninho_id, dock) in &rows {
                     ui.label(RichText::new(l.port.to_string()).strong().color(fg()));
                     ui.label(RichText::new(if l.program.is_empty() { "?" } else { &l.program }).color(fg()));
                     ui.label(RichText::new(l.pid.to_string()).color(muted()));
-                    let col = if ninho_id.is_some() { ok() } else if who == "Windows" { muted() } else if who.starts_with(self.t("blocks")) { amber() } else { fg() };
+                    let col = if ninho_id.is_some() { ok() } else if who == "Windows" { muted() } else if who.contains(self.t("blocks")) { amber() } else if dock.is_some() { brand() } else { fg() };
                     ui.label(RichText::new(who).color(col));
                     let local = l.addrs.iter().all(|a| a.starts_with("127.") || a == "[::1]");
                     ui.label(RichText::new(if local { self.t("this_pc") } else { self.t("network") }).size(12.0).color(muted()))
@@ -2528,7 +2549,12 @@ impl NinhoApp {
                             open(&format!("http://localhost:{}", l.port));
                         }
                         // Windows' own programs can not be stopped from here.
-                        if !ports::is_system(&l.program, l.pid) {
+                        if let Some(d) = dock {
+                            // A Docker container: docker stop, not a kill of the relay program that serves every container.
+                            if named(ui.add(button(self.t("stop_container"), Tone::Danger, CONTROL_SM)), format!("{} {}", self.t("stop_container"), d.name)).clicked() {
+                                self.confirm_docker = Some(d.clone());
+                            }
+                        } else if !ports::is_system(&l.program, l.pid) {
                             if let Some(id) = ninho_id {
                                 // A server of Ninho: the normal stop, not a kill.
                                 if named(ui.add(button(self.t("stop"), Tone::Neutral, CONTROL_SM)), format!("{} {who}", self.t("stop"))).clicked() {
@@ -2611,6 +2637,41 @@ impl NinhoApp {
                 }
             });
         self.show_updates = open;
+    }
+
+    /// "Stop container": the same kind of confirmation as ending a program; docker stop keeps the container.
+    fn docker_window(&mut self, ctx: &egui::Context) {
+        let Some(d) = self.confirm_docker.clone() else { return };
+        let mut keep = true;
+        egui::Window::new(self.t("stop_container"))
+            .collapsible(false)
+            .resizable(false)
+            .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
+            .show(ctx, |ui| {
+                let ports_txt = d.ports.iter().filter(|p| p.proto == "tcp").map(|p| p.host_port.to_string()).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>().join(", ");
+                ui.label(fill(self.t("stop_container_text"), &[("name", &d.name), ("image", &d.image), ("ports", &ports_txt)]));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.add(button(self.t("stop_container"), Tone::Danger, CONTROL)).clicked() {
+                        let (shared, lang, d) = (self.shared.clone(), self.s.language, d.clone());
+                        std::thread::spawn(move || {
+                            match docker::stop(&d.id) {
+                                Ok(()) => shared.say(format!("{} {} ({})", tr(lang, "log_container_stopped"), d.name, d.image)),
+                                Err(e) => shared.say(format!("{} {}: {e}", tr(lang, "log_container_stop_failed"), d.name)),
+                            }
+                            shared.refresh_docker(true);
+                            shared.refresh();
+                        });
+                        keep = false;
+                    }
+                    if ui.add(button(self.t("cancel"), Tone::Neutral, CONTROL)).clicked() {
+                        keep = false;
+                    }
+                });
+            });
+        if !keep {
+            self.confirm_docker = None;
+        }
     }
 
     fn kill_window(&mut self, ctx: &egui::Context) {
@@ -3025,7 +3086,7 @@ impl NinhoApp {
     fn open_windows(&self) -> [bool; 13] {
         [
             self.update_win, self.imp_win, self.show_prefs, self.show_project, self.show_db, self.show_new, self.show_updates,
-            self.db.open, self.log_win.open, self.node_win, self.health_win, self.confirm_kill.is_some(), self.db.confirm.is_some(),
+            self.db.open, self.log_win.open, self.node_win, self.health_win, self.confirm_kill.is_some() || self.confirm_docker.is_some(), self.db.confirm.is_some(),
         ]
     }
 
@@ -3042,7 +3103,10 @@ impl NinhoApp {
             8 => self.log_win.open = false,
             9 => self.node_win = false,
             10 => self.health_win = false,
-            11 => self.confirm_kill = None,
+            11 => {
+                self.confirm_kill = None;
+                self.confirm_docker = None;
+            }
             _ => self.db.confirm = None,
         }
     }
@@ -3199,6 +3263,7 @@ impl eframe::App for NinhoApp {
             self.health_window(&ctx);
         }
         self.kill_window(&ctx);
+        self.docker_window(&ctx);
         self.keyboard_step(&ctx);
         self.pop_step(&ctx);
         // A server that was just downloaded shows up in Modules right away (it was easy to miss it unticked).

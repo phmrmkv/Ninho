@@ -1,15 +1,18 @@
 #![windows_subsystem = "windows"]
 
 mod app;
+mod caddy;
 mod certs;
 mod cli;
 mod dbtools;
+mod docker;
 mod health;
 mod i18n;
 mod icons;
 mod importer;
 mod install;
 mod mcp;
+mod mongo;
 mod nodever;
 mod phpini;
 mod ports;

@@ -373,5 +373,14 @@
   "sites_count_one": "witryna",
   "sites_count_many": "witryn",
   "create_db_go": "Utwórz bazę danych",
-  "import_none_here": "W tym folderze nie ma niczego do zaimportowania."
+  "import_none_here": "W tym folderze nie ma niczego do zaimportowania.",
+  "log_no_mongosh": "Brakuje MongoDB Shell (mongosh): pobierz go w Pobierz i aktualizuj.",
+  "log_mongo_no_shell": "Brakuje mongosh, więc MongoDB jest kończony wprost (prowadzi dziennik zapisów, nic nie ginie). Pobierz mongosh, aby zatrzymać go łagodnie.",
+  "log_caddy_conf_failed": "nie udało się zapisać pliku Caddyfile:",
+  "log_caddy_no_php": "PHP nie ma php-cgi.exe, więc pliki .php nie działają w Caddy.",
+  "log_caddy_php_failed": "nie udało się uruchomić php-cgi:",
+  "stop_container": "Zatrzymaj kontener",
+  "stop_container_text": "Zatrzymać kontener Docker {name} ({image}), który publikuje port(y) {ports}? Zatrzymanie przez docker stop; kontener i jego dane zostają.",
+  "log_container_stopped": "Kontener zatrzymany:",
+  "log_container_stop_failed": "Nie udało się zatrzymać kontenera"
 }

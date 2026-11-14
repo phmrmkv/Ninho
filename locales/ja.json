@@ -373,5 +373,14 @@
   "sites_count_one": "サイト",
   "sites_count_many": "サイト",
   "create_db_go": "データベースを作成",
-  "import_none_here": "そのフォルダーにはインポートできるものがありません。"
+  "import_none_here": "そのフォルダーにはインポートできるものがありません。",
+  "log_no_mongosh": "MongoDB Shell(mongosh)がありません。「ダウンロードと更新」で入手してください。",
+  "log_mongo_no_shell": "mongosh がないため、MongoDB はそのまま終了します(書き込みはジャーナルに残るので失われません)。きれいに止めるには mongosh を入手してください。",
+  "log_caddy_conf_failed": "Caddyfile を書き込めませんでした:",
+  "log_caddy_no_php": "PHP に php-cgi.exe がないため、Caddy では .php ファイルが動きません。",
+  "log_caddy_php_failed": "php-cgi を起動できませんでした:",
+  "stop_container": "コンテナを停止",
+  "stop_container_text": "ポート {ports} を公開している Docker コンテナ {name}({image})を停止しますか? docker stop で停止し、コンテナとデータは残ります。",
+  "log_container_stopped": "コンテナを停止しました:",
+  "log_container_stop_failed": "コンテナを停止できませんでした"
 }

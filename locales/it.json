@@ -373,5 +373,14 @@
   "sites_count_one": "sito",
   "sites_count_many": "siti",
   "create_db_go": "Crea database",
-  "import_none_here": "Niente da importare in quella cartella."
+  "import_none_here": "Niente da importare in quella cartella.",
+  "log_no_mongosh": "Manca MongoDB Shell (mongosh): scaricala in Scarica e aggiorna.",
+  "log_mongo_no_shell": "Manca mongosh, quindi MongoDB viene chiuso direttamente (tiene un journal, non si perde nulla). Scarica mongosh per un arresto pulito.",
+  "log_caddy_conf_failed": "impossibile scrivere il Caddyfile:",
+  "log_caddy_no_php": "PHP non ha php-cgi.exe, quindi i file .php non girano in Caddy.",
+  "log_caddy_php_failed": "impossibile avviare php-cgi:",
+  "stop_container": "Ferma contenitore",
+  "stop_container_text": "Fermare il contenitore Docker {name} ({image}), che pubblica la/le porta/e {ports}? Viene fermato con docker stop; il contenitore e i suoi dati restano.",
+  "log_container_stopped": "Contenitore fermato:",
+  "log_container_stop_failed": "Impossibile fermare il contenitore"
 }

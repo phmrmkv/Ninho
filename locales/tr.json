@@ -373,5 +373,14 @@
   "sites_count_one": "site",
   "sites_count_many": "site",
   "create_db_go": "Veritabanı oluştur",
-  "import_none_here": "Bu klasörde içe aktarılacak bir şey yok."
+  "import_none_here": "Bu klasörde içe aktarılacak bir şey yok.",
+  "log_no_mongosh": "MongoDB Shell (mongosh) yok: İndir ve güncelle bölümünden alın.",
+  "log_mongo_no_shell": "mongosh yok, bu yüzden MongoDB doğrudan sonlandırılıyor (yazdıklarını günlüğe işler, bir şey kaybolmaz). Düzgün kapatmak için mongosh'u alın.",
+  "log_caddy_conf_failed": "Caddyfile yazılamadı:",
+  "log_caddy_no_php": "PHP'de php-cgi.exe yok, bu yüzden .php dosyaları Caddy'de çalışmaz.",
+  "log_caddy_php_failed": "php-cgi başlatılamadı:",
+  "stop_container": "Kapsayıcıyı durdur",
+  "stop_container_text": "{ports} bağlantı noktasını yayınlayan Docker kapsayıcısı {name} ({image}) durdurulsun mu? docker stop ile durdurulur; kapsayıcı ve verileri korunur.",
+  "log_container_stopped": "Kapsayıcı durduruldu:",
+  "log_container_stop_failed": "Kapsayıcı durdurulamadı"
 }
