@@ -67,13 +67,14 @@ jobs:
           curl -fsS http://localhost:8000/ | grep ninho-ok
           curl -fsS http://127.0.0.1:8080/ | grep ninho
           for id in php redis postgres apache; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="running"' status.json; done
-          # Informational: MySQL is held to /var/lib/mysql by Ubuntu's AppArmor profile; with the profile off, the
+          # MySQL is held to /var/lib/mysql by Ubuntu's AppArmor profile (Ninho says so); with the profile off, the
           # next start makes Ninho's data folder and runs it.
-          sudo aa-status 2>/dev/null | grep -i mysql || true
           sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld || true
-          $B start mysql || true
-          $B status
+          $B start mysql
+          $B status --json | tee status.json
           tail -n 15 ~/Ninho/data/mysql-*/mysqld.log || true
+          jq -e '.[] | select(.id=="mysql") | .state=="running"' status.json
+          ! grep -q "Can't find error-message file" ~/Ninho/data/mysql-*/mysqld.log
           $B stop php redis postgres mailpit mysql apache
           $B status --json | tee after.json
-          for id in php redis postgres apache; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="stopped"' after.json; done
+          for id in php redis postgres apache mysql; do jq -e --arg id $id '.[] | select(.id==$id) | .state=="stopped"' after.json; done

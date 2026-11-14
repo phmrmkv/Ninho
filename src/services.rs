@@ -509,8 +509,10 @@ fn build_command(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Command {
                 cmd.arg("--no-defaults");
             }
             cmd.arg(format!("--port={port}"));
+            // Linux and macOS: the system MySQL's own home (its error messages and share files), and its socket.
             #[cfg(unix)]
-            cmd.arg(format!("--socket={}", socket_dir().join(format!("ninho-mysql-{port}.sock")).display()));
+            cmd.arg(format!("--basedir={}", basedir(vdir, "bin/mysqld").display()))
+                .arg(format!("--socket={}", socket_dir().join(format!("ninho-mysql-{port}.sock")).display()));
             if let Some(data) = mysql_data(s, c, vdir) {
                 if c.is_extra() {
                     // Its own data, and no second "X protocol" port (33060 belongs to the first MySQL).
