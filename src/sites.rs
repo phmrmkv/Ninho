@@ -235,6 +235,10 @@ pub fn refresh(shared: &Arc<Shared>, s: &Settings, verbose: bool) {
     } else {
         0
     };
+    // Caddy has one file for all the sites, written again at every start; here when the sites change meanwhile.
+    if s.svc("caddy").enabled && crate::services::version_dir(s, "caddy").is_some() {
+        let _ = crate::caddy::write_current(s);
+    }
     if verbose || a + n > 0 {
         shared.say(format!("{} {}, {} {}", tr(s.language, "log_sites_found"), sites.len(), tr(s.language, "log_files_updated"), a + n));
     }

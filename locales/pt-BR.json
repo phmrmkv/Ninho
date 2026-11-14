@@ -537,5 +537,14 @@
   "proj_save": "Salvar configuração do projeto",
   "proj_saved": "ninho.project.json salvo.",
   "proj_save_failed": "não consegui salvar o ninho.project.json:",
-  "proj_pinned": "PHP definido pelo ninho.project.json"
+  "proj_pinned": "PHP definido pelo ninho.project.json",
+  "log_no_mongosh": "Falta o MongoDB Shell (mongosh): baixe em Baixar e atualizar.",
+  "log_mongo_no_shell": "Falta o mongosh, então o MongoDB é encerrado direto (ele grava um diário, nada se perde). Baixe o mongosh para uma parada tranquila.",
+  "log_caddy_conf_failed": "não deu para gravar o Caddyfile:",
+  "log_caddy_no_php": "O PHP não tem php-cgi.exe, então os arquivos .php não rodam no Caddy.",
+  "log_caddy_php_failed": "não deu para iniciar o php-cgi:",
+  "stop_container": "Parar contêiner",
+  "stop_container_text": "Parar o contêiner Docker {name} ({image}), que publica a(s) porta(s) {ports}? Ele é parado com docker stop; o contêiner e os dados dele ficam.",
+  "log_container_stopped": "Contêiner parado:",
+  "log_container_stop_failed": "Não deu para parar o contêiner"
 }

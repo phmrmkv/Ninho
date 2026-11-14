@@ -42,13 +42,14 @@ source (MIT or GPL-3.0, your choice), portable** local development environment w
 
 | | |
 |---|---|
-| **Modules** | Apache, MySQL (8.4 LTS), MariaDB (LTS), PostgreSQL, PHP built-in server, Mailpit, Redis, Memcached, Nginx |
+| **Modules** | Apache, MySQL (8.4 LTS), MariaDB (LTS), PostgreSQL, MongoDB, PHP built-in server, Mailpit, Redis, Memcached, Nginx, Caddy |
 | **Tools on the PATH** | PHP, MySQL client, Node.js / npm / npx, Composer and Git when present (Terminal button) |
 | **Version manager** | Newest stable PHP, MySQL 8.4, Node.js LTS, Mailpit and Redis from their official sites; pick the version per module |
 | **PHP extensions** | Turn `mysqli`, `pdo_mysql`, `gd`, `intl`, `curl`, `zip`... on or off from the Config menu (edits `php.ini` for you) |
 | **Database admin** | *Admin* on MySQL opens HeidiSQL when installed, otherwise [Adminer](https://www.adminer.org) served by your PHP |
 | **Apache in one click** | Newest Win64 build, set up for your PHP (as a module), your `www` folder and the `.test` sites |
-| **Virtual hosts** | Every folder in `www` becomes `http://<folder>.test` (hosts file and Apache/Nginx configs written for you) |
+| **Virtual hosts** | Every folder in `www` becomes `http://<folder>.test` (hosts file and Apache/Nginx configs written for you; Caddy gets a Caddyfile and serves them on port 2015) |
+| **Docker in Ports** | When Docker is running, its containers show in the Ports tab as `Docker: name (image)` with a *Stop container* button; without Docker nothing changes |
 | **HTTPS** | One switch gives every `.test` site a certificate from Ninho's local authority (trusted for your user only) |
 | **Sites tab** | Each site with its kind (Laravel, WordPress, Symfony, Node.js...), its address, Open, Terminal, VS Code |
 | **PHP per site** | Run one site on its own PHP server with its own PHP version, side by side with Apache |
@@ -185,7 +186,7 @@ is no way back.
 
 **Where are my settings?** In `ninho.json`, beside `Ninho.exe`.
 
-**32-bit Windows?** Use `Ninho-x86.exe`. PHP, Apache, Mailpit, Node.js (up to 22) and cloudflared have 32-bit builds; MySQL 8.4, MariaDB, PostgreSQL and Redis don't, and Ninho tells you so.
+**32-bit Windows?** Use `Ninho-x86.exe`. PHP, Apache, Mailpit, Node.js (up to 22) and cloudflared have 32-bit builds; MySQL 8.4, MariaDB, PostgreSQL, MongoDB, Caddy and Redis don't, and Ninho tells you so.
 
 **Linux or macOS?** Not yet: see the [roadmap](ROADMAP.md). Ninho's window already runs there; the server management is Windows-only for now.
 
@@ -251,7 +252,7 @@ This program will not transfer any information to other networked systems unless
 
 What Ninho reaches on the internet, and only for what you use:
 - **Updates of Ninho:** when it opens, it asks GitHub for the latest release of Ninho (switch it off in Preferences).
-- **Downloads:** *Download and update* reads the official sites of each program (windows.php.net, dev.mysql.com, nodejs.org, Apache Lounge, mariadb.org, postgresql.org, xdebug.org, adminer.org, GitHub) to list and download versions.
+- **Downloads:** *Download and update* reads the official sites of each program (windows.php.net, dev.mysql.com, nodejs.org, Apache Lounge, mariadb.org, postgresql.org, downloads.mongodb.org, xdebug.org, adminer.org, GitHub) to list and download versions.
 - **Share a site:** *Share link* starts a Cloudflare quick tunnel ([Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/)); your site is reachable through that link until you stop sharing.
 
 Ninho sends no usage data, no crash reports and no identifiers. A crash is written only to `tmp\ninho-crash.log` on your PC.

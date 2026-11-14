@@ -10,6 +10,8 @@ pub fn color(kind: &str) -> Color32 {
     match kind {
         "apache" => c(0xd2_4b_3c),
         "nginx" => c(0x2e_9e_5b),
+        "caddy" => c(0x1f_88_c0),
+        "mongodb" => c(0x3f_a3_4d),
         "mysql" => c(0x2f_6f_b5),
         "postgres" => c(0x33_67_91),
         "mariadb" => c(0x8a_5a_3c),
@@ -33,7 +35,7 @@ pub fn draw(p: &Painter, r: Rect, kind: &str) {
     let at = |x: f32, y: f32| pos2(r.left() + s * x, r.top() + s * y);
     match kind {
         // Web servers: a globe.
-        "apache" | "nginx" => {
+        "apache" | "nginx" | "caddy" => {
             let rad = s * 0.30;
             p.circle_stroke(ctr, rad, line);
             p.line_segment([pos2(ctr.x - rad, ctr.y), pos2(ctr.x + rad, ctr.y)], line);
@@ -42,7 +44,7 @@ pub fn draw(p: &Painter, r: Rect, kind: &str) {
             p.add(e);
         }
         // Database: a cylinder.
-        "mysql" | "postgres" | "mariadb" => {
+        "mysql" | "postgres" | "mariadb" | "mongodb" => {
             let (x0, x1, y0, y1) = (0.26, 0.74, 0.28, 0.74);
             let rx = s * (x1 - x0) / 2.0;
             let ry = s * 0.09;

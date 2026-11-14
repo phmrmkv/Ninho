@@ -1,6 +1,7 @@
 //! Every TCP port something is listening on in this PC (netstat), with the program behind it (tasklist).
 use std::collections::HashMap;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::time::Duration;
 
 use crate::services::hide_window;
 
@@ -19,6 +20,27 @@ fn run(cmd: &str, args: &[&str]) -> String {
     c.args(args);
     hide_window(&mut c);
     c.output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
+}
+
+/// Run a program with a time limit (hidden window, no input): its output, or None when it cannot start, fails to
+/// finish in time (it is then ended) or cannot be read.
+pub fn output_timeout(mut c: Command, limit: Duration) -> Option<Output> {
+    c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    hide_window(&mut c);
+    let child = c.spawn().ok()?;
+    let pid = child.id();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    match rx.recv_timeout(limit) {
+        Ok(Ok(o)) => Some(o),
+        Ok(Err(_)) => None,
+        Err(_) => {
+            let _ = kill(pid);
+            None
+        }
+    }
 }
 
 /// PID → program name, from `tasklist /fo csv /nh`.

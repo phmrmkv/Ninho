@@ -537,5 +537,14 @@
   "proj_save": "Salva impostazioni del progetto",
   "proj_saved": "ninho.project.json salvato.",
   "proj_save_failed": "impossibile salvare ninho.project.json:",
-  "proj_pinned": "PHP scelto da ninho.project.json"
+  "proj_pinned": "PHP scelto da ninho.project.json",
+  "log_no_mongosh": "Manca MongoDB Shell (mongosh): scaricala in Scarica e aggiorna.",
+  "log_mongo_no_shell": "Manca mongosh, quindi MongoDB viene chiuso direttamente (tiene un journal, non si perde nulla). Scarica mongosh per un arresto pulito.",
+  "log_caddy_conf_failed": "impossibile scrivere il Caddyfile:",
+  "log_caddy_no_php": "PHP non ha php-cgi.exe, quindi i file .php non girano in Caddy.",
+  "log_caddy_php_failed": "impossibile avviare php-cgi:",
+  "stop_container": "Ferma contenitore",
+  "stop_container_text": "Fermare il contenitore Docker {name} ({image}), che pubblica la/le porta/e {ports}? Viene fermato con docker stop; il contenitore e i suoi dati restano.",
+  "log_container_stopped": "Contenitore fermato:",
+  "log_container_stop_failed": "Impossibile fermare il contenitore"
 }

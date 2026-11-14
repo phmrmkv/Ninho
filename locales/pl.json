@@ -537,5 +537,14 @@
   "proj_save": "Zapisz ustawienia projektu",
   "proj_saved": "zapisano ninho.project.json.",
   "proj_save_failed": "nie udało się zapisać ninho.project.json:",
-  "proj_pinned": "PHP wybrany przez ninho.project.json"
+  "proj_pinned": "PHP wybrany przez ninho.project.json",
+  "log_no_mongosh": "Brakuje MongoDB Shell (mongosh): pobierz go w Pobierz i aktualizuj.",
+  "log_mongo_no_shell": "Brakuje mongosh, więc MongoDB jest kończony wprost (prowadzi dziennik zapisów, nic nie ginie). Pobierz mongosh, aby zatrzymać go łagodnie.",
+  "log_caddy_conf_failed": "nie udało się zapisać pliku Caddyfile:",
+  "log_caddy_no_php": "PHP nie ma php-cgi.exe, więc pliki .php nie działają w Caddy.",
+  "log_caddy_php_failed": "nie udało się uruchomić php-cgi:",
+  "stop_container": "Zatrzymaj kontener",
+  "stop_container_text": "Zatrzymać kontener Docker {name} ({image}), który publikuje port(y) {ports}? Zatrzymanie przez docker stop; kontener i jego dane zostają.",
+  "log_container_stopped": "Kontener zatrzymany:",
+  "log_container_stop_failed": "Nie udało się zatrzymać kontenera"
 }

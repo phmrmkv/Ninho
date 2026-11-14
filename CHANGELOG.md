@@ -3,6 +3,10 @@
 ## Unreleased
 - Change the MySQL / MariaDB root password from the Config menu. Ninho can remember it, encrypted with Windows DPAPI for your user, and uses it to stop the server, in the database tools, the importer and the project database check.
 - `ninho.project.json`: a project file with PHP and Node.js version, servers, port and database. Sites show a project tag, use the file's PHP, start its servers with the site and offer to create its database; *More > Save project settings* writes the file.
+- MongoDB as a new server (port 27017, data in `data\mongodb`): *Download and update* reads MongoDB's own feed and installs the newest major release of the Community Server (no rapid releases). MongoDB Shell (mongosh) is a separate download; with it Ninho stops MongoDB politely, without it the program is ended (its journal keeps the data safe). *Admin* opens mongosh. More than one MongoDB can run (*New server*).
+- Caddy as a web server beside Apache and Nginx (port 2015, plain HTTP, only this PC): Ninho writes `etc\caddy\Caddyfile` with every `www` folder as `<name>.test` and starts a few php-cgi workers for PHP. Downloaded from GitHub (caddyserver/caddy).
+- Ports tab: containers of a running Docker show as `Docker: name (image)` instead of `com.docker.backend.exe`, with a *Stop container* button (`docker stop`, asks first). Docker is only asked while the tab is open; no Docker, no change.
+- 9 new texts in the 18 languages.
 
 ## 0.6.2 — 2026-11-13
 - A UX review of every screen: nothing cut off at the smallest window size, the same words for the same action, no exclamation marks, buttons all in the same three sizes.

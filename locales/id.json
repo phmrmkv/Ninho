@@ -537,5 +537,14 @@
   "proj_save": "Simpan pengaturan proyek",
   "proj_saved": "ninho.project.json disimpan.",
   "proj_save_failed": "tidak bisa menyimpan ninho.project.json:",
-  "proj_pinned": "PHP dipilih oleh ninho.project.json"
+  "proj_pinned": "PHP dipilih oleh ninho.project.json",
+  "log_no_mongosh": "MongoDB Shell (mongosh) belum ada: ambil di Unduh dan perbarui.",
+  "log_mongo_no_shell": "mongosh belum ada, jadi MongoDB dihentikan langsung (ia mencatat jurnal tulisannya, tidak ada yang hilang). Ambil mongosh agar berhenti dengan rapi.",
+  "log_caddy_conf_failed": "tidak bisa menulis Caddyfile:",
+  "log_caddy_no_php": "PHP tidak punya php-cgi.exe, jadi file .php tidak akan berjalan di Caddy.",
+  "log_caddy_php_failed": "tidak bisa memulai php-cgi:",
+  "stop_container": "Hentikan kontainer",
+  "stop_container_text": "Hentikan kontainer Docker {name} ({image}) yang membuka port {ports}? Dihentikan dengan docker stop; kontainer dan datanya tetap ada.",
+  "log_container_stopped": "Kontainer dihentikan:",
+  "log_container_stop_failed": "Tidak bisa menghentikan kontainer"
 }

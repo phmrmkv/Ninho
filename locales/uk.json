@@ -537,5 +537,14 @@
   "proj_save": "Зберегти налаштування проєкту",
   "proj_saved": "ninho.project.json збережено.",
   "proj_save_failed": "не вдалося зберегти ninho.project.json:",
-  "proj_pinned": "PHP обрано в ninho.project.json"
+  "proj_pinned": "PHP обрано в ninho.project.json",
+  "log_no_mongosh": "Немає MongoDB Shell (mongosh): завантажте його в «Завантаження й оновлення».",
+  "log_mongo_no_shell": "Немає mongosh, тому MongoDB завершується напряму (він веде журнал запису, нічого не втрачається). Завантажте mongosh для м'якої зупинки.",
+  "log_caddy_conf_failed": "не вдалося записати Caddyfile:",
+  "log_caddy_no_php": "У PHP немає php-cgi.exe, тому файли .php у Caddy не виконуються.",
+  "log_caddy_php_failed": "не вдалося запустити php-cgi:",
+  "stop_container": "Зупинити контейнер",
+  "stop_container_text": "Зупинити контейнер Docker {name} ({image}), який публікує порт(и) {ports}? Він зупиняється командою docker stop; контейнер і його дані зберігаються.",
+  "log_container_stopped": "Контейнер зупинено:",
+  "log_container_stop_failed": "Не вдалося зупинити контейнер"
 }

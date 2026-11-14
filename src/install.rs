@@ -5,6 +5,8 @@
 //!   MySQL    newest 8.4.x (the LTS line, same as the data folder); 9.x is not offered, it would convert the data
 //!   Node.js  nodejs.org/dist/index.json, newest LTS
 //!   Mailpit  GitHub, latest release
+//!   MongoDB  downloads.mongodb.org/current.json (mongo.rs); mongosh from GitHub and downloads.mongodb.com
+//!   Caddy    GitHub caddyserver/caddy, the windows_amd64 ZIP (caddy.rs)
 //!   Redis    the last Windows build (tporadowski 5.0.14.1)
 //!   Apache   the newest Win64 build on apachelounge.com (the Windows builds the Apache project points to)
 use std::path::{Path, PathBuf};
@@ -33,6 +35,9 @@ pub const TOOLS: &[(&str, &str, &str)] = &[
     ("nodejs", "Node.js", "nodejs"),
     ("mailpit", "Mailpit", "mailpit"),
     ("redis", "Redis", "redis"),
+    ("mongodb", "MongoDB", "mongodb"),
+    ("mongosh", "MongoDB Shell (mongosh)", "mongosh"),
+    ("caddy", "Caddy", "caddy"),
 ];
 
 /// A version that can be downloaded.
@@ -79,11 +84,11 @@ fn get(url: &str) -> Result<Vec<u8>, String> {
     if out.status.success() { Ok(out.stdout) } else { Err(format!("{url}: {}", String::from_utf8_lossy(&out.stderr).trim())) }
 }
 
-fn json(url: &str) -> Result<serde_json::Value, String> {
+pub(crate) fn json(url: &str) -> Result<serde_json::Value, String> {
     serde_json::from_slice(&get(url)?).map_err(|e| format!("{url}: {e}"))
 }
 
-fn exists(url: &str) -> bool {
+pub(crate) fn exists(url: &str) -> bool {
     let mut c = Command::new(win("curl.exe"));
     c.args(["-s", "-o", "NUL", "-I", "-L", "-w", "%{http_code}", url]);
     hide_window(&mut c);
@@ -252,6 +257,9 @@ pub fn latest(lang: Lang, tool: &str) -> Result<Latest, String> {
         "mysql" => mysql_latest(lang),
         "nodejs" => node_latest(),
         "mailpit" => mailpit_latest(),
+        "mongodb" => crate::mongo::latest_server(lang),
+        "mongosh" => crate::mongo::latest_shell(lang),
+        "caddy" => crate::caddy::latest(lang),
         "redis" if X86 => Err(no_32bit(lang, "Redis")),
         "redis" => Ok(Latest {
             version: "5.0.14.1".into(),
@@ -275,7 +283,7 @@ fn installed_now(root: &str, dir: &str) -> Vec<String> {
                 .filter(|e| e.path().is_dir())
                 .filter(|e| {
                     let p = e.path();
-                    ["php.exe", r"bin\mysqld.exe", "node.exe", "mailpit.exe", "redis-server.exe", r"bin\httpd.exe", r"bin\postgres.exe", r"bin\mariadbd.exe"].iter().any(|x| p.join(x).is_file())
+                    ["php.exe", r"bin\mysqld.exe", "node.exe", "mailpit.exe", "redis-server.exe", r"bin\httpd.exe", r"bin\postgres.exe", r"bin\mariadbd.exe", r"bin\mongod.exe", r"bin\mongosh.exe", "caddy.exe"].iter().any(|x| p.join(x).is_file())
                 })
                 .map(|e| e.file_name().to_string_lossy().into_owned())
                 .collect()
@@ -316,6 +324,17 @@ fn unzip(zip: &Path, dest: &Path) -> Result<(), String> {
     hide_window(&mut c);
     let out = c.output().map_err(|e| e.to_string())?;
     if out.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+}
+
+/// The one folder a ZIP unpacked into `dir` (its name).
+fn sole_dir(dir: &Path) -> Result<String, String> {
+    let names: Vec<String> = std::fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    if names.len() == 1 { Ok(names.into_iter().next().unwrap()) } else { Err(format!("{}: {} folders at the top of the ZIP", dir.display(), names.len())) }
 }
 
 /// The my.ini (or php.ini) of the newest other version folder, to carry the person's settings over.
@@ -371,6 +390,14 @@ fn finish(shared: &Shared, s: &Settings, tool: &str, kind_dir: &Path, vdir: &Pat
                 shared.say(format!("{}: {} {data}", if tool == "postgres" { "PostgreSQL" } else { "MariaDB" }, tr(lang, "log_data_folder")));
             }
         }
+        "mongodb" => {
+            // The data folder is made now so the first start finds it.
+            let c = s.svc(tool).clone();
+            let data = crate::services::engine_data(s, &c, vdir);
+            if std::fs::create_dir_all(&data).is_ok() {
+                shared.say(format!("MongoDB: {} {data}", tr(lang, "log_data_folder")));
+            }
+        }
         "php" => {
             let ini = vdir.join("php.ini");
             if !ini.is_file() {
@@ -422,7 +449,9 @@ pub fn install(shared: Arc<Shared>, s: Settings, tool: String, id: String) {
             let _ = std::fs::remove_dir_all(&aside);
             unzip(&zip, &aside)?;
             std::fs::create_dir_all(&kind_dir).map_err(|e| e.to_string())?;
-            std::fs::rename(aside.join(&l.top), &vdir).map_err(|e| format!("{} {}: {e}", tr(lang, "log_move_failed"), l.top))?;
+            // "*": the ZIP has one folder at the top and its name does not matter (MongoDB names it by build).
+            let top = if l.top == "*" { sole_dir(&aside)? } else { l.top.clone() };
+            std::fs::rename(aside.join(&top), &vdir).map_err(|e| format!("{} {}: {e}", tr(lang, "log_move_failed"), l.top))?;
             let _ = std::fs::remove_dir_all(&aside);
         }
         let _ = std::fs::remove_file(&zip);
