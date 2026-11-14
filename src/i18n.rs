@@ -161,7 +161,8 @@ pub fn moods(lang: Lang) -> &'static (Vec<String>, Vec<String>) {
 }
 
 /// Give egui a font for writing systems its own fonts don't cover (CJK, Devanagari), from the Windows fonts folder.
-/// Latin, Cyrillic and Vietnamese are covered by egui's own fonts.
+/// Latin and Cyrillic are covered by egui's own fonts; Vietnamese letters with two marks (ạ, ữ, ể...) are not, so
+/// Segoe UI (or Arial) is always added last as a fallback — it also draws "Tiếng Việt" in the language list.
 pub fn install_fonts(ctx: &egui::Context, lang: Lang) {
     let candidates: &[&str] = match LOCALES[lang.0].3 {
         Script::Latin => &[],
@@ -177,6 +178,12 @@ pub fn install_fonts(ctx: &egui::Context, lang: Lang) {
         defs.font_data.insert("system-script".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
         for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
             defs.families.entry(family).or_default().push("system-script".into());
+        }
+    }
+    if let Some(bytes) = ["segoeui.ttf", "arial.ttf", "tahoma.ttf"].iter().find_map(|f| std::fs::read(fonts.join(f)).ok()) {
+        defs.font_data.insert("system-latin".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            defs.families.entry(family).or_default().push("system-latin".into());
         }
     }
     ctx.set_fonts(defs);
