@@ -488,5 +488,15 @@
   "h_vc_miss_t": "Thiếu Visual C++ 2015-2022",
   "h_vc_ok_d": "Apache, PHP và PostgreSQL cần nó, và nó đã có sẵn.",
   "h_vc_ok_t": "Đã cài Visual C++ 2015-2022",
-  "h_who": "{program} (PID {pid})"
+  "h_who": "{program} (PID {pid})",
+  "home_sites": "Trang web",
+  "home_no_sites": "Chưa có trang web nào. Hãy tạo một thư mục trong thư mục www rồi làm mới các trang web trong Ninho.",
+  "home_servers": "Máy chủ",
+  "home_tools": "Công cụ",
+  "home_mail": "Hộp thư Mailpit",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "Bạn có tệp index riêng trong thư mục www. Trang này được hiển thị ở đây; tệp của bạn nằm tại",
+  "home_footer": "Trang này do Ninho tạo và được ghi lại khi các trang web được làm mới hoặc máy chủ khởi động.",
+  "home_page_pref": "Trang chủ Ninho tại http://localhost",
+  "home_open": "Mở trang chủ"
 }

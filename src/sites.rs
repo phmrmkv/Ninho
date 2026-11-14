@@ -203,6 +203,7 @@ fn update_hosts(shared: &Arc<Shared>, s: &Settings, sites: &[Site]) {
 
 /// Make the sites' web server files and hosts entries match the document root.
 pub fn refresh(shared: &Arc<Shared>, s: &Settings, verbose: bool) {
+    crate::home::write(s);
     if !s.auto_vhosts {
         return;
     }

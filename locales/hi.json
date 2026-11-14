@@ -488,5 +488,15 @@
   "h_vc_miss_t": "Visual C++ 2015-2022 मौजूद नहीं है",
   "h_vc_ok_d": "Apache, PHP और PostgreSQL को इसकी ज़रूरत है, और यह मौजूद है।",
   "h_vc_ok_t": "Visual C++ 2015-2022 इंस्टॉल है",
-  "h_who": "{program} (PID {pid})"
+  "h_who": "{program} (PID {pid})",
+  "home_sites": "साइटें",
+  "home_no_sites": "अभी कोई साइट नहीं है। www फ़ोल्डर में एक फ़ोल्डर बनाएँ, फिर Ninho में साइटें रीफ़्रेश करें।",
+  "home_servers": "सर्वर",
+  "home_tools": "टूल",
+  "home_mail": "Mailpit इनबॉक्स",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "www फ़ोल्डर में आपकी अपनी index फ़ाइल है। यहाँ यही पेज दिखता है; आपकी फ़ाइल यहाँ है",
+  "home_footer": "यह पेज Ninho बनाता है और साइटें रीफ़्रेश होने या सर्वर शुरू होने पर दोबारा लिखा जाता है।",
+  "home_page_pref": "http://localhost पर Ninho का होम पेज",
+  "home_open": "होम पेज खोलें"
 }

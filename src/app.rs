@@ -542,6 +542,8 @@ impl NinhoApp {
         self.s = d;
         self.save();
         self.shared.say(self.t("saved"));
+        let s = self.s.clone();
+        std::thread::spawn(move || crate::home::write(&s));
         self.show_prefs = false;
     }
 
@@ -877,6 +879,10 @@ impl NinhoApp {
                     }
                     if ui.button(self.t("import_title")).clicked() {
                         self.open_import();
+                        ui.close();
+                    }
+                    if ui.button(self.t("home_open")).clicked() {
+                        open(&crate::home::url(&self.s));
                         ui.close();
                     }
                     ui.separator();
@@ -2789,6 +2795,7 @@ impl NinhoApp {
                         ui.checkbox(&mut self.draft.close_to_tray, tr(lang, "close_to_tray"));
                         ui.checkbox(&mut self.draft.start_hidden, tr(lang, "start_hidden"));
                         ui.checkbox(&mut self.draft.check_updates, tr(lang, "check_updates"));
+                        ui.checkbox(&mut self.draft.home_page, tr(lang, "home_page_pref"));
                         ui.separator();
                         // Portable or installed: one exe either way.
                         if crate::selfinstall::is_installed_copy() {

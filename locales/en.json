@@ -488,5 +488,15 @@
   "h_vc_miss_t": "Visual C++ 2015-2022 is missing",
   "h_vc_ok_d": "Apache, PHP and PostgreSQL need it, and it is present.",
   "h_vc_ok_t": "Visual C++ 2015-2022 installed",
-  "h_who": "{program} (PID {pid})"
+  "h_who": "{program} (PID {pid})",
+  "home_sites": "Sites",
+  "home_no_sites": "No sites yet. Create a folder in your www folder, then refresh the sites in Ninho.",
+  "home_servers": "Servers",
+  "home_tools": "Tools",
+  "home_mail": "Mailpit inbox",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "You have your own index file in the www folder. This page is shown here; your file is at",
+  "home_footer": "This page is made by Ninho and written again when the sites refresh or the servers start.",
+  "home_page_pref": "Ninho home page at http://localhost",
+  "home_open": "Open home page"
 }

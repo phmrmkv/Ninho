@@ -488,5 +488,15 @@
   "h_vc_miss_t": "Manca Visual C++ 2015-2022",
   "h_vc_ok_d": "Apache, PHP e PostgreSQL ne hanno bisogno, ed è presente.",
   "h_vc_ok_t": "Visual C++ 2015-2022 installato",
-  "h_who": "{program} (PID {pid})"
+  "h_who": "{program} (PID {pid})",
+  "home_sites": "Siti",
+  "home_no_sites": "Ancora nessun sito. Crea una cartella nella cartella www e aggiorna i siti in Ninho.",
+  "home_servers": "Server",
+  "home_tools": "Strumenti",
+  "home_mail": "Posta in arrivo di Mailpit",
+  "home_adminer": "Adminer (MySQL)",
+  "home_your_files": "Hai un tuo file index nella cartella www. Qui viene mostrata questa pagina; il tuo file è su",
+  "home_footer": "Questa pagina è creata da Ninho e riscritta quando i siti si aggiornano o i server si avviano.",
+  "home_page_pref": "Pagina iniziale di Ninho su http://localhost",
+  "home_open": "Apri la pagina iniziale"
 }

@@ -5,6 +5,7 @@ mod certs;
 mod cli;
 mod dbtools;
 mod health;
+mod home;
 mod i18n;
 mod icons;
 mod importer;
