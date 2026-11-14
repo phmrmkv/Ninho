@@ -12,6 +12,7 @@ mod install;
 mod mcp;
 mod nodever;
 mod phpini;
+mod platform;
 mod ports;
 mod qr;
 mod selfinstall;
@@ -57,7 +58,7 @@ fn main() -> eframe::Result<()> {
         for tool in &args[i + 1..] {
             install::install(shared.clone(), s.clone(), tool.clone(), tool.clone());
         }
-        let log = std::path::Path::new(&s.root).join(r"tmp\ninho-install.log");
+        let log = std::path::Path::new(&s.root).join("tmp").join("ninho-install.log");
         let _ = std::fs::write(log, shared.log.lock().unwrap().join("\r\n") + "\r\n");
         return Ok(());
     }

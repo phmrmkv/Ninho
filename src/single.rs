@@ -1,6 +1,7 @@
 //! One Ninho window at a time. The first copy owns a named mutex and waits on a named event; opening Ninho again
 //! (Start menu, desktop, a second double click) just fires that event, and the first copy shows its window — even
 //! when it was hidden in the tray. Two copies would fight over the same ports and settings.
+//! Linux and macOS: the same with a local socket instead of the mutex and the event (platform/unix.rs).
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -26,7 +27,9 @@ mod win {
 }
 
 /// Per Windows user session, so two people on one PC each get their own Ninho.
+#[cfg(windows)]
 const MUTEX: &str = "Local\\Ninho.SingleInstance";
+#[cfg(windows)]
 const SHOW: &str = "Local\\Ninho.Show";
 
 /// True when another Ninho is already open: it was asked to show its window, and this copy should quit.
@@ -47,7 +50,7 @@ pub fn already_running(wait: bool) -> bool {
                 if e.is_null() {
                     // The other copy is not answering (it may run as administrator): say so instead of vanishing.
                     let s = crate::settings::Settings::load();
-                    crate::selfinstall::message("Ninho", crate::i18n::tr(s.language, "already_running"));
+                    crate::platform::message("Ninho", crate::i18n::tr(s.language, "already_running"));
                 } else {
                     win::SetEvent(e);
                     win::CloseHandle(e);
@@ -60,7 +63,10 @@ pub fn already_running(wait: bool) -> bool {
         // The event is made now too, so a copy opened while this window is still starting finds it.
         let _ = win::CreateEventW(std::ptr::null_mut(), 0, 0, win::wide(SHOW).as_ptr());
     }
-    false
+    #[cfg(unix)]
+    return crate::platform::already_running(wait);
+    #[cfg(windows)]
+    return false;
 }
 
 static GUI: AtomicBool = AtomicBool::new(false);
@@ -85,8 +91,8 @@ pub fn listen(flag: Arc<AtomicBool>, ctx: eframe::egui::Context) {
             }
         }
     });
-    #[cfg(not(windows))]
-    let _ = (flag, ctx);
+    #[cfg(unix)]
+    crate::platform::listen(flag, ctx);
 }
 
 /// Crash log: the reason, where it happened and the call stack go to <root>\tmp\ninho-crash.log, and Windows shows
@@ -112,6 +118,6 @@ pub fn crash_log() {
             return;
         }
         let msg = format!("{}\n\n{}", crate::i18n::tr(s.language, "crash_text"), file.display());
-        crate::selfinstall::message("Ninho", &msg);
+        crate::platform::message("Ninho", &msg);
     }));
 }

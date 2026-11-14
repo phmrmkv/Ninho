@@ -20,17 +20,31 @@ jobs:
         run: cargo test --release
 
   # Linux and macOS (preview). The tray on Linux talks D-Bus (ksni), so no GTK is needed to build.
+  # The Intel Mac build is cross-compiled on the Apple silicon runner (as release.yml does) and only built.
   unix:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            test: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            test: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            test: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Rust toolchain
-        run: rustup toolchain install stable --profile minimal && rustup default stable
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --target ${{ matrix.target }}
       - name: Test
-        run: cargo test --release
+        if: matrix.test
+        run: cargo test --release --target ${{ matrix.target }}

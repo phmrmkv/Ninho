@@ -22,10 +22,9 @@ pub struct PhpInfo {
 /// Settings written under `[xdebug]` when Xdebug is switched on.
 const BLOCK: [&str; 3] = ["xdebug.mode=debug,develop", "xdebug.start_with_request=trigger", "xdebug.client_port=9003"];
 
-fn win(tool: &str) -> PathBuf {
-    // Windows' own curl, always there on Windows 10+.
-    let sys = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&sys).join("System32").join(tool)
+fn win(_tool: &str) -> PathBuf {
+    // The system's curl (Windows' own, always there on Windows 10+).
+    crate::platform::curl()
 }
 
 fn get_text(url: &str) -> Result<String, String> {
@@ -161,6 +160,11 @@ pub fn status(php_dir: &Path) -> (bool, bool) {
 
 /// Download the matching DLL from xdebug.org into ext\php_xdebug.dll. Returns the Xdebug version.
 pub fn install(php_dir: &Path, shared: &Shared, lang: Lang) -> Result<String, String> {
+    // Linux and macOS: xdebug.org only builds DLLs for Windows; the system PHP gets Xdebug from its packages.
+    if !cfg!(windows) {
+        let cmd = if cfg!(target_os = "macos") { "pecl install xdebug" } else { "sudo apt install php-xdebug / sudo dnf install php-pecl-xdebug3" };
+        return Err(format!("Xdebug: {cmd}"));
+    }
     let info = php_info(lang, php_dir)?;
     if !info.x64 {
         return Err(tr(lang, "log_xdebug_64").into());

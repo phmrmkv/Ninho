@@ -660,6 +660,8 @@ mod tests {
         }
     }
 
+    // XAMPP, WampServer and Laragon are Windows programs (Windows paths in the fixtures).
+    #[cfg(windows)]
     #[test]
     fn finds_one_folder_the_person_points_at() {
         let base = tmp("find-in");
@@ -677,6 +679,7 @@ mod tests {
         assert!(find_in(&base.join("ninho"), &base.join("nao-existe")).is_none());
     }
 
+    #[cfg(windows)]
     #[test]
     fn finds_the_three_installs_and_skips_ninho_itself() {
         let base = tmp("find");
@@ -780,6 +783,7 @@ mod tests {
         assert!(ver_key("mysql-8") > ver_key("mysql-5"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn my_ini_datadir() {
         let base = Path::new(r"C:\wamp64\bin\mysql\mysql8");

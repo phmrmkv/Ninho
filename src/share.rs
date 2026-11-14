@@ -9,22 +9,36 @@ use crate::services::{Shared, hide_window};
 use crate::i18n::tr;
 use crate::settings::Settings;
 
+#[cfg(windows)]
 const DOWNLOAD: &str = if cfg!(target_arch = "x86") {
     "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-386.exe"
 } else {
     "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
 };
+/// Linux: a single program, like on Windows.
+#[cfg(target_os = "linux")]
+const DOWNLOAD: &str = if cfg!(target_arch = "aarch64") {
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+} else {
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+};
+/// macOS: a .tgz with the program inside, unpacked after the download.
+#[cfg(target_os = "macos")]
+const DOWNLOAD: &str = if cfg!(target_arch = "aarch64") {
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz"
+} else {
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz"
+};
 /// How many output lines are kept for error messages.
 const KEEP_LINES: usize = 20;
 
 fn exe_path(s: &Settings) -> PathBuf {
-    Path::new(&s.root).join("bin").join("cloudflared").join("cloudflared.exe")
+    Path::new(&s.root).join("bin").join("cloudflared").join(crate::platform::exe("cloudflared"))
 }
 
-/// Windows' own curl (same choice as install.rs: it ships with Windows 10+ and handles TLS and redirects).
+/// The system's curl (Windows' own on Windows 10+, same choice as install.rs: it handles TLS and redirects).
 fn curl() -> PathBuf {
-    let sys = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&sys).join("System32").join("curl.exe")
+    crate::platform::curl()
 }
 
 /// True when the exe starts and answers --version (a half-downloaded or blocked file does not).
@@ -68,6 +82,23 @@ pub fn install(s: &Settings, shared: &Shared) -> Result<PathBuf, String> {
     if std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0) < 1_000_000 {
         let _ = std::fs::remove_file(&part);
         return Err(tr(lang, "log_cf_too_small").into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // The .tgz holds the program: unpack it beside the download, then the rename below puts it in place.
+        let tgz = dir.join("cloudflared.tgz");
+        std::fs::rename(&part, &tgz).map_err(|e| e.to_string())?;
+        let out = Command::new(crate::platform::tar()).arg("-xzf").arg(&tgz).arg("-C").arg(dir).output().map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&tgz);
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        }
+        std::fs::rename(dir.join("cloudflared"), &part).map_err(|e| e.to_string())?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&part, std::fs::Permissions::from_mode(0o755));
     }
     std::fs::rename(&part, &exe).map_err(|e| format!("{} ({e})", tr(lang, "log_cf_place_failed")))?;
     if !runs(&exe) {

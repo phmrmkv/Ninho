@@ -7,6 +7,9 @@
 //!   Mailpit  GitHub, latest release
 //!   Redis    the last Windows build (tporadowski 5.0.14.1)
 //!   Apache   the newest Win64 build on apachelounge.com (the Windows builds the Apache project points to)
+//! Linux and macOS (preview): Mailpit and Node.js come from the same official sites (their Linux / macOS builds);
+//! Apache, PHP, MySQL, MariaDB, PostgreSQL, Redis and Memcached come from the package manager and are linked in
+//! (platform/systools.rs).
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -50,15 +53,9 @@ pub struct Latest {
 pub fn page(key: &str) -> Option<&'static str> {
     match key {
         "nginx" => Some("https://nginx.org/en/download.html"),
-        "memcached" => Some("https://memcached.org/downloads"),
+        "memcached" if cfg!(windows) => Some("https://memcached.org/downloads"),
         _ => None,
     }
-}
-
-fn win(tool: &str) -> PathBuf {
-    // Windows' own curl and tar (Git's tar cannot open ZIP files).
-    let sys = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&sys).join("System32").join(tool)
 }
 
 /// curl arguments that every site accepts (Apache Lounge wants a browser-like agent and its own page as referrer).
@@ -70,7 +67,7 @@ fn polite(c: &mut Command, url: &str) {
 }
 
 fn get(url: &str) -> Result<Vec<u8>, String> {
-    let mut c = Command::new(win("curl.exe"));
+    let mut c = Command::new(crate::platform::curl());
     c.args(["-L", "-f", "-s", "-S"]);
     polite(&mut c, url);
     c.arg(url);
@@ -84,8 +81,8 @@ fn json(url: &str) -> Result<serde_json::Value, String> {
 }
 
 fn exists(url: &str) -> bool {
-    let mut c = Command::new(win("curl.exe"));
-    c.args(["-s", "-o", "NUL", "-I", "-L", "-w", "%{http_code}", url]);
+    let mut c = Command::new(crate::platform::curl());
+    c.args(["-s", "-o", crate::platform::NULL_DEVICE, "-I", "-L", "-w", "%{http_code}", url]);
     hide_window(&mut c);
     c.output().map(|o| String::from_utf8_lossy(&o.stdout).trim() == "200").unwrap_or(false)
 }
@@ -159,14 +156,14 @@ fn mysql_latest(lang: Lang) -> Result<Latest, String> {
 fn node_latest() -> Result<Latest, String> {
     let v = json("https://nodejs.org/dist/index.json")?;
     // Newest LTS that has a Windows ZIP for this architecture (32-bit builds stopped after Node.js 22).
-    let file = if X86 { "win-x86-zip" } else { "win-x64-zip" };
+    let file = crate::nodever::index_key();
     let lts = v
         .as_array()
-        .and_then(|a| a.iter().find(|r| r["lts"].as_str().is_some() && r["files"].as_array().is_some_and(|f| f.iter().any(|x| x.as_str() == Some(file)))))
+        .and_then(|a| a.iter().find(|r| r["lts"].as_str().is_some() && r["files"].as_array().is_some_and(|f| f.iter().any(|x| x.as_str() == Some(file.as_str())))))
         .ok_or("no LTS in index.json")?;
     let ver = lts["version"].as_str().ok_or("index.json")?;
-    let name = format!("node-{ver}-{}", if X86 { "win-x86" } else { "win-x64" });
-    Ok(Latest { version: ver.trim_start_matches('v').to_string(), url: format!("https://nodejs.org/dist/{ver}/{name}.zip"), top: name.clone(), folder: name })
+    let name = format!("node-{ver}-{}", crate::nodever::ARCH);
+    Ok(Latest { version: ver.trim_start_matches('v').to_string(), url: format!("https://nodejs.org/dist/{ver}/{name}.{}", crate::nodever::ARCHIVE), top: name.clone(), folder: name })
 }
 
 fn apache_latest() -> Result<Latest, String> {
@@ -231,12 +228,24 @@ fn mariadb_latest(lang: Lang) -> Result<Latest, String> {
     Ok(Latest { version: version.clone(), url: format!("https://archive.mariadb.org/mariadb-{version}/winx64-packages/{name}.zip"), top: name.clone(), folder: name })
 }
 
+/// The official Mailpit build for this system.
+fn mailpit_asset() -> String {
+    let arch = if X86 { "386" } else if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" };
+    if cfg!(windows) {
+        format!("mailpit-windows-{arch}.zip")
+    } else if cfg!(target_os = "macos") {
+        format!("mailpit-darwin-{arch}.tar.gz")
+    } else {
+        format!("mailpit-linux-{arch}.tar.gz")
+    }
+}
+
 fn mailpit_latest() -> Result<Latest, String> {
     let v = json("https://api.github.com/repos/axllent/mailpit/releases/latest")?;
     let tag = v["tag_name"].as_str().ok_or("no release found")?;
     Ok(Latest {
         version: tag.trim_start_matches('v').to_string(),
-        url: format!("https://github.com/axllent/mailpit/releases/download/{tag}/mailpit-windows-{}.zip", if X86 { "386" } else { "amd64" }),
+        url: format!("https://github.com/axllent/mailpit/releases/download/{tag}/{}", mailpit_asset()),
         top: String::new(),
         folder: tag.trim_start_matches('v').to_string(),
     })
@@ -244,6 +253,13 @@ fn mailpit_latest() -> Result<Latest, String> {
 
 /// The newest stable version of a tool, read from its official site.
 pub fn latest(lang: Lang, tool: &str) -> Result<Latest, String> {
+    // Linux and macOS: the version the package manager installed (or what to install), see platform/systools.rs.
+    #[cfg(unix)]
+    if crate::platform::systools::from_system(tool) {
+        let version = crate::platform::systools::latest(lang, tool)?;
+        let folder = crate::platform::systools::folder_name(tool, &version);
+        return Ok(Latest { version, url: String::new(), top: String::new(), folder });
+    }
     match tool {
         "php" => php_latest(),
         "apache" => apache_latest(),
@@ -275,7 +291,11 @@ fn installed_now(root: &str, dir: &str) -> Vec<String> {
                 .filter(|e| e.path().is_dir())
                 .filter(|e| {
                     let p = e.path();
-                    ["php.exe", r"bin\mysqld.exe", "node.exe", "mailpit.exe", "redis-server.exe", r"bin\httpd.exe", r"bin\postgres.exe", r"bin\mariadbd.exe"].iter().any(|x| p.join(x).is_file())
+                    let x = crate::platform::exe;
+                    [p.join(x("php")), p.join("bin").join(x("mysqld")), p.join(x("node")), p.join(x("mailpit")), p.join(x("redis-server")), p.join("bin").join(x("httpd")), p.join("bin").join(x("postgres")), p.join("bin").join(x("mariadbd"))]
+                        .iter()
+                        .any(|f| f.is_file())
+                        || (cfg!(unix) && p.join("memcached").is_file())
                 })
                 .map(|e| e.file_name().to_string_lossy().into_owned())
                 .collect()
@@ -286,7 +306,7 @@ fn installed_now(root: &str, dir: &str) -> Vec<String> {
 }
 
 fn download(shared: &Shared, lang: Lang, id: &str, url: &str, to: &Path) -> Result<(), String> {
-    let mut c = Command::new(win("curl.exe"));
+    let mut c = Command::new(crate::platform::curl());
     c.args(["-L", "-f", "-s", "-S", "--retry", "2"]);
     polite(&mut c, url);
     c.arg("-o").arg(to).arg(url);
@@ -307,7 +327,7 @@ fn download(shared: &Shared, lang: Lang, id: &str, url: &str, to: &Path) -> Resu
 
 fn unzip(zip: &Path, dest: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
-    let mut c = Command::new(win("tar.exe"));
+    let mut c = Command::new(crate::platform::tar());
     c.arg("-xf").arg(zip).arg("-C").arg(dest);
     // The PostgreSQL ZIP carries pgAdmin (811 MB) and StackBuilder: Ninho does not need them.
     if zip.to_string_lossy().contains("postgresql-") {
@@ -346,20 +366,28 @@ fn finish(shared: &Shared, s: &Settings, tool: &str, kind_dir: &Path, vdir: &Pat
                 shared.say(format!("MySQL: {}", tr(lang, "log_myini_kept")));
             }
             let data = std::fs::read_to_string(&ini).ok().and_then(|t| {
-                t.lines().find(|l| l.trim().to_ascii_lowercase().starts_with("datadir")).and_then(|l| l.split_once('=')).map(|(_, v)| v.trim().trim_matches('"').replace('/', "\\"))
+                t.lines().find(|l| l.trim().to_ascii_lowercase().starts_with("datadir")).and_then(|l| l.split_once('=')).map(|(_, v)| crate::platform::native_slashes(v.trim().trim_matches('"')))
             });
             if let Some(data) = data {
                 if Path::new(&data).join("mysql").is_dir() {
                     shared.say(format!("MySQL: {} {data}", tr(lang, "log_data_existing")));
                 } else if !Path::new(&data).exists() {
-                    let mut c = Command::new(vdir.join(r"bin\mysqld.exe"));
-                    c.args(["--no-defaults", "--initialize-insecure", &format!("--basedir={}", vdir.display()), &format!("--datadir={data}")]);
+                    let mut c = Command::new(vdir.join("bin").join(crate::platform::exe("mysqld")));
+                    c.args(["--no-defaults", "--initialize-insecure", &format!("--basedir={}", crate::services::basedir(vdir, "bin/mysqld").display()), &format!("--datadir={data}")]);
                     hide_window(&mut c);
-                    let ok = c.output().map(|o| o.status.success()).unwrap_or(false);
+                    let out = c.output();
+                    let ok = out.as_ref().map(|o| o.status.success()).unwrap_or(false);
                     shared.say(if ok { format!("MySQL: {} {data}", tr(lang, "log_data_new")) } else { format!("MySQL: {} {data}", tr(lang, "log_data_create_failed")) });
+                    // Linux and macOS: say why (Ubuntu's AppArmor profile for mysqld only allows /var/lib/mysql...).
+                    #[cfg(unix)]
+                    if let (false, Ok(o)) = (ok, &out) {
+                        shared.say(format!("MySQL: {}", String::from_utf8_lossy(&o.stderr).lines().filter(|l| l.contains("ERROR")).last().unwrap_or("").trim()));
+                    }
                 }
             }
         }
+        #[cfg(unix)]
+        "nodejs" => crate::nodever::link_bins(vdir),
         "apache" => match crate::services::apache_setup(s, vdir) {
             Ok(()) => shared.say(format!("Apache: {}", tr(lang, "log_httpd_ok"))),
             Err(e) => shared.say(format!("Apache: {} {e}", tr(lang, "log_httpd_failed"))),
@@ -397,10 +425,15 @@ pub fn install(shared: Arc<Shared>, s: Settings, tool: String, id: String) {
     let lang = s.language;
     let (name, dir) = TOOLS.iter().find(|t| t.0 == tool).map(|t| (t.1, t.2)).unwrap_or((tool.as_str(), tool.as_str()));
     let kind_dir = Path::new(&s.root).join("bin").join(dir);
-    let tmp = Path::new(&s.root).join(r"tmp\ninho-downloads");
+    let tmp = Path::new(&s.root).join("tmp").join("ninho-downloads");
     let _ = std::fs::create_dir_all(&tmp);
     shared.installing.lock().unwrap().insert(id.clone(), "…".into());
     let run = || -> Result<(String, PathBuf), String> {
+        // Linux and macOS: the servers come from the package manager; Ninho links them (platform/systools.rs).
+        #[cfg(unix)]
+        if crate::platform::systools::from_system(&tool) {
+            return crate::platform::systools::link(&shared, &s, &tool, &kind_dir);
+        }
         shared.say(format!("{name}: {}", tr(lang, "log_looking_newest")));
         let l = latest(lang, &tool)?;
         if kind_dir.join(&l.folder).is_dir() && !installed(&s.root, dir).is_empty() && installed(&s.root, dir).contains(&l.folder) {

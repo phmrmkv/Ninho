@@ -21,14 +21,29 @@ pub struct Release {
     pub page: String,
 }
 
-fn win(tool: &str) -> PathBuf {
-    // Windows' own curl, same as install.rs (no TLS code of our own).
-    let sys = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&sys).join("System32").join(tool)
+/// The file of each release built for this system: Ninho-x64.exe / Ninho-x86.exe (Windows), Ninho-linux-x64,
+/// Ninho-macos-arm64 / Ninho-macos-x64 (single programs, no archive, so the update swaps one file everywhere).
+fn asset_name() -> &'static str {
+    if cfg!(windows) {
+        if cfg!(target_arch = "x86") { "Ninho-x86.exe" } else { "Ninho-x64.exe" }
+    } else if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") { "Ninho-macos-arm64" } else { "Ninho-macos-x64" }
+    } else if cfg!(target_arch = "aarch64") {
+        "Ninho-linux-arm64"
+    } else {
+        "Ninho-linux-x64"
+    }
 }
 
-fn asset_name() -> &'static str {
-    if cfg!(target_arch = "x86") { "Ninho-x86.exe" } else { "Ninho-x64.exe" }
+/// The first bytes of a program for this system: MZ (Windows), ELF (Linux), Mach-O 64-bit (macOS).
+fn looks_like_program(head: &[u8; 4]) -> bool {
+    if cfg!(windows) {
+        &head[..2] == b"MZ"
+    } else if cfg!(target_os = "macos") {
+        head == &[0xcf, 0xfa, 0xed, 0xfe] || head == &[0xca, 0xfe, 0xba, 0xbe]
+    } else {
+        head == b"ELF"
+    }
 }
 
 /// Numbers of "v0.6.0" in order; padded with zeros when compared, so 0.6 == 0.6.0.
@@ -46,7 +61,7 @@ fn is_newer(candidate: &str, current: &str) -> bool {
 
 /// GET with curl; returns (HTTP status, body). Network failures become readable messages.
 fn http_get(url: &str, api: bool) -> Result<(u16, Vec<u8>), String> {
-    let mut c = Command::new(win("curl.exe"));
+    let mut c = Command::new(crate::platform::curl());
     c.args(["-L", "-s", "-S", "--max-time", "30", "-A", AGENT]);
     if api {
         c.args(["-H", "Accept: application/vnd.github+json"]);
@@ -106,6 +121,10 @@ pub fn check() -> Result<Option<Release>, String> {
         c => return Err(status_error(c)),
     }
     let v: serde_json::Value = serde_json::from_slice(&body).map_err(|e| format!("Unexpected answer from GitHub: {e}"))?;
+    // Linux and macOS (preview): a release without a build for this system is "nothing newer", not an error.
+    if !cfg!(windows) && !v["assets"].as_array().is_some_and(|a| a.iter().any(|x| x["name"].as_str() == Some(asset_name()))) {
+        return Ok(None);
+    }
     Ok(parse_release(&v, asset_name())?.filter(|r| is_newer(&r.version, env!("CARGO_PKG_VERSION"))))
 }
 
@@ -172,7 +191,7 @@ pub fn download_and_swap(r: &Release, progress: &dyn Fn(u64)) -> Result<PathBuf,
 }
 
 fn fetch_and_verify(r: &Release, to: &Path, expected: Option<&str>, progress: &dyn Fn(u64)) -> Result<(), String> {
-    let mut c = Command::new(win("curl.exe"));
+    let mut c = Command::new(crate::platform::curl());
     c.args(["-L", "-f", "-s", "-S", "--retry", "2", "-A", AGENT]).arg("-o").arg(to).arg(&r.exe_url);
     hide_window(&mut c);
     let mut child = c.spawn().map_err(|e| format!("Could not run curl: {e}"))?;
@@ -192,10 +211,15 @@ fn fetch_and_verify(r: &Release, to: &Path, expected: Option<&str>, progress: &d
     if size < 1_048_576 {
         return Err("The downloaded file is too small to be Ninho; the download was discarded.".into());
     }
-    let mut head = [0u8; 2];
+    let mut head = [0u8; 4];
     std::io::Read::read_exact(&mut std::fs::File::open(to).map_err(|e| e.to_string())?, &mut head).map_err(|e| e.to_string())?;
-    if &head != b"MZ" {
-        return Err("The downloaded file is not a Windows program; the download was discarded.".into());
+    if !looks_like_program(&head) {
+        return Err(format!("The downloaded file is not a {} program; the download was discarded.", crate::platform::os_name()));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(to, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
     }
     if let Some(want) = expected
         && sha256_file(to)? != want
@@ -209,22 +233,31 @@ fn fetch_and_verify(r: &Release, to: &Path, expected: Option<&str>, progress: &d
 /// lock) by then. The caller must exit right after this returns Ok.
 /// `start_again`: ids of the servers that were running, started again by the new copy (it waits for this one to close).
 pub fn restart(new_exe: &Path, start_again: &[String]) -> Result<(), String> {
-    let mut c = Command::new("cmd");
-    c.env("NINHO_START_AFTER_UPDATE", start_again.join(","));
-    let line = format!("ping -n 2 127.0.0.1 >nul & start \"\" \"{}\" --after-update", new_exe.display());
+    #[cfg(unix)]
+    {
+        // sh waits two seconds, then becomes the new Ninho ($0 is the program, so no quoting is needed).
+        let mut c = Command::new("sh");
+        c.args(["-c", "sleep 2; exec \"$0\" --after-update"]).arg(new_exe);
+        c.env("NINHO_START_AFTER_UPDATE", start_again.join(","));
+        c.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+        return c.spawn().map(|_| ()).map_err(|e| format!("Could not start the new version: {e}"));
+    }
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        // raw_arg: cmd does not understand Rust's \" quoting (same as selfinstall.rs).
-        c.raw_arg(format!("/c \"{line}\""));
+        let mut c = Command::new("cmd");
+        c.env("NINHO_START_AFTER_UPDATE", start_again.join(","));
+        let line = format!("ping -n 2 127.0.0.1 >nul & start \"\" \"{}\" --after-update", new_exe.display());
+        {
+            use std::os::windows::process::CommandExt;
+            // raw_arg: cmd does not understand Rust's \" quoting (same as selfinstall.rs).
+            c.raw_arg(format!("/c \"{line}\""));
+        }
+        if let Some(dir) = new_exe.parent() {
+            c.current_dir(dir);
+        }
+        hide_window(&mut c);
+        return c.spawn().map(|_| ()).map_err(|e| format!("Could not start the new version: {e}"));
     }
-    #[cfg(not(windows))]
-    c.args(["/c", &line]);
-    if let Some(dir) = new_exe.parent() {
-        c.current_dir(dir);
-    }
-    hide_window(&mut c);
-    c.spawn().map(|_| ()).map_err(|e| format!("Could not start the new version: {e}"))
 }
 
 /// Deletes the Ninho.exe.old left by the last update. Call at every start; errors are ignored

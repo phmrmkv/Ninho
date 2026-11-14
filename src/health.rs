@@ -47,7 +47,9 @@ pub fn check(s: &Settings) -> Vec<Finding> {
     let mut out = Vec::new();
     // One look at the ports for all checks, so the servers are compared against the same picture.
     let listeners = ports::listening();
-    guarded("Visual C++", &mut out, |o| vc_runtime(s, o));
+    if cfg!(windows) {
+        guarded("Visual C++", &mut out, |o| vc_runtime(s, o));
+    }
     guarded("Servidores e portas", &mut out, |o| servers(s, &listeners, o));
     guarded("Apache", &mut out, |o| apache(s, o));
     guarded("PHP", &mut out, |o| php(s, o));
@@ -135,6 +137,9 @@ pub(crate) fn parse_excluded(text: &str) -> Vec<(u16, u16)> {
 }
 
 fn excluded_ranges() -> Vec<(u16, u16)> {
+    if !cfg!(windows) {
+        return Vec::new();
+    }
     let mut c = Command::new("netsh");
     c.args(["int", "ipv4", "show", "excludedportrange", "protocol=tcp"]);
     services::hide_window(&mut c);
@@ -196,7 +201,7 @@ fn servers(s: &Settings, listeners: &[ports::Listener], out: &mut Vec<Finding>) 
         if services::version_dir(s, &c.id).is_none() {
             out.push(warn(
                 format!("{name} não está instalado"),
-                format!("Não achei {} em {}\\bin\\{}.", d.exe, s.root, d.dir),
+                format!("Não achei {} em {}.", d.exe, crate::platform::join(&s.root, &["bin", d.dir])),
                 "Baixe pela janela \"Baixar e atualizar\" ou desligue este servidor.",
             ));
             continue;
@@ -239,13 +244,17 @@ fn apache(s: &Settings, out: &mut Vec<Finding>) {
         return;
     }
     let Some(v) = services::version_dir(s, "apache") else { return };
-    let exe = v.join(r"bin\httpd.exe");
+    let exe = v.join("bin").join(crate::platform::exe("httpd"));
     // conf/ninho.conf is written at the first start; before that httpd.conf still points at the zip's own folder
     // and the test would complain about folders that are fine.
-    if !v.join(r"conf\ninho.conf").is_file() {
+    if !v.join("conf").join("ninho.conf").is_file() {
         out.push(ok("Apache: configuração ainda não preparada", "O Ninho prepara o httpd.conf no primeiro início; o teste de sintaxe roda depois disso."));
     } else {
-        match run(&exe, &["-t"], Some(&v)) {
+        // Linux and macOS: the system Apache needs to be told where Ninho's config is.
+        let conf = v.join("conf").join("httpd.conf").to_string_lossy().into_owned();
+        let vs = v.to_string_lossy().into_owned();
+        let args: Vec<&str> = if cfg!(windows) { vec!["-t"] } else { vec!["-d", &vs, "-f", &conf, "-t"] };
+        match run(&exe, &args, Some(&v)) {
             None => out.push(err("Apache não abriu para o teste", format!("Não consegui executar {}.", exe.display()), "Veja se o Visual C++ está instalado e se o antivírus não bloqueou o httpd.exe.")),
             Some((_, text)) => match httpd_verdict(&text) {
                 Ok(()) => out.push(ok("Configuração do Apache válida", "O teste \"httpd -t\" respondeu Syntax OK.")),
@@ -253,8 +262,8 @@ fn apache(s: &Settings, out: &mut Vec<Finding>) {
             },
         }
     }
-    // PHP as an Apache module.
-    if let Some(php) = services::version_dir(s, "php") {
+    // PHP as an Apache module (Windows; on Linux and macOS it is the system's mod_php, in httpd.conf).
+    if let Some(php) = services::version_dir(s, "php").filter(|_| cfg!(windows)) {
         if php_module(&php).is_some() {
             out.push(ok("Módulo PHP do Apache presente", "O PHP escolhido tem o módulo para rodar dentro do Apache."));
         } else {
@@ -296,7 +305,7 @@ fn php(s: &Settings, out: &mut Vec<Finding>) {
     let Some(v) = services::version_dir(s, "php") else { return };
     let label = v.file_name().unwrap_or_default().to_string_lossy().into_owned();
     // -n: no php.ini, so a broken ini cannot hide a broken PHP (and the other way round).
-    match run(&v.join("php.exe"), &["-n", "-v"], Some(&v)) {
+    match run(&v.join(crate::platform::exe("php")), &["-n", "-v"], Some(&v)) {
         Some((true, text)) if text.contains("PHP") => {
             out.push(ok(format!("PHP {label} executa"), text.lines().map(str::trim).find(|l| l.starts_with("PHP")).unwrap_or("php -v respondeu").to_string()));
         }
@@ -308,6 +317,10 @@ fn php(s: &Settings, out: &mut Vec<Finding>) {
             ));
             return;
         }
+    }
+    // Linux and macOS: the system PHP keeps its php.ini (and extensions) where the package manager put them.
+    if !cfg!(windows) {
+        return;
     }
     let ini = v.join("php.ini");
     let Ok(text) = std::fs::read_to_string(&ini) else {
@@ -401,8 +414,7 @@ fn site_folder(s: &Settings, out: &mut Vec<Finding>) {
 }
 
 fn hosts_path() -> PathBuf {
-    let win = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    Path::new(&win).join(r"System32\drivers\etc\hosts")
+    PathBuf::from(crate::platform::hosts_path())
 }
 
 /// How many lines of the hosts file Ninho owns.
@@ -491,9 +503,14 @@ fn free_bytes(path: &Path) -> Option<u64> {
     (r != 0).then_some(avail)
 }
 
+/// Linux and macOS: `df -Pk` (POSIX output, 1 KB blocks), column "Available" of its second line.
 #[cfg(not(windows))]
-fn free_bytes(_path: &Path) -> Option<u64> {
-    None
+fn free_bytes(path: &Path) -> Option<u64> {
+    let dir = path.ancestors().find(|p| p.is_dir())?;
+    let out = Command::new("df").arg("-Pk").arg(dir).stdin(Stdio::null()).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let cols: Vec<&str> = text.lines().nth(1)?.split_whitespace().collect();
+    cols.get(3)?.parse::<u64>().ok().map(|k| k * 1024)
 }
 
 fn gb(b: u64) -> String {

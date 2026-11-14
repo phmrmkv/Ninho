@@ -47,6 +47,7 @@ fn backups_dir(s: &Settings, id: &str) -> PathBuf {
 /// A client command (`mysql.exe` / `mysqldump.exe`) wired to the server; password via env, never argv.
 fn client(s: &Settings, id: &str, exe: &str, password: &str) -> Result<Command, String> {
     let v = version_dir(s, id).ok_or("MySQL is not installed")?;
+    let exe = &crate::platform::exe(exe);
     let path = v.join("bin").join(exe);
     if !path.is_file() {
         return Err(format!("{exe} not found in {}", v.join("bin").display()));
@@ -68,7 +69,7 @@ fn stderr_of(out: &std::process::Output) -> String {
 
 /// Databases on one MySQL server, without system schemas (mysql, sys, information_schema, performance_schema).
 pub fn databases(s: &Settings, id: &str, password: &str) -> Result<Vec<String>, String> {
-    let mut c = client(s, id, "mysql.exe", password)?;
+    let mut c = client(s, id, "mysql", password)?;
     // -N: no header, -B: one name per line.
     c.args(["-N", "-B", "-e", "SHOW DATABASES"]);
     let out = c.stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
@@ -93,7 +94,7 @@ pub fn backup(s: &Settings, id: &str, db: &str, password: &str) -> Result<PathBu
     let file = dir.join(format!("{db}-{}.sql", stamp_now()));
     let out_file = File::create(&file).map_err(|e| format!("cannot create {}: {e}", file.display()))?;
 
-    let mut c = client(s, id, "mysqldump.exe", password)?;
+    let mut c = client(s, id, "mysqldump", password)?;
     c.args(["--single-transaction", "--routines", "--events", "--hex-blob", "--default-character-set=utf8mb4"]);
     c.arg(db);
     // The dump streams straight to disk; only stderr is captured.
@@ -150,7 +151,7 @@ fn load_sql(s: &Settings, id: &str, file: &Path, db: &str, password: &str) -> Re
     // Open first: a missing file should fail before the database is created.
     let input = File::open(file).map_err(|e| format!("cannot open {}: {e}", file.display()))?;
 
-    let mut c = client(s, id, "mysql.exe", password)?;
+    let mut c = client(s, id, "mysql", password)?;
     c.args(["--default-character-set=utf8mb4", "-e"]);
     c.arg(format!("CREATE DATABASE IF NOT EXISTS `{db}` CHARACTER SET utf8mb4"));
     let out = c.stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
@@ -158,7 +159,7 @@ fn load_sql(s: &Settings, id: &str, file: &Path, db: &str, password: &str) -> Re
         return Err(stderr_of(&out));
     }
 
-    let mut c = client(s, id, "mysql.exe", password)?;
+    let mut c = client(s, id, "mysql", password)?;
     c.arg("--default-character-set=utf8mb4");
     c.arg(db);
     // The file feeds stdin directly, so a big dump never sits in memory.
@@ -168,15 +169,9 @@ fn load_sql(s: &Settings, id: &str, file: &Path, db: &str, password: &str) -> Re
 
 // ---- time and names (the pure parts are unit-tested) ----
 
-/// The PC's offset from UTC in minutes, asked to Windows once (std has no time zones).
+/// The PC's offset from UTC in minutes (asked to the system once, see platform).
 fn utc_offset_min() -> i64 {
-    static OFFSET: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
-    *OFFSET.get_or_init(|| {
-        let mut c = Command::new("powershell");
-        c.args(["-NoProfile", "-Command", "[int][TimeZoneInfo]::Local.GetUtcOffset([DateTime]::Now).TotalMinutes"]);
-        hide_window(&mut c);
-        c.output().ok().and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok()).unwrap_or(0)
-    })
+    crate::platform::utc_offset_min()
 }
 
 /// Days since 1970-01-01 to (year, month, day), proleptic Gregorian (Hinnant's civil_from_days).

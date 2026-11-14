@@ -23,6 +23,7 @@ pub struct ServiceDef {
 }
 
 // Kinds of server Ninho runs, with their usual ports.
+#[cfg(windows)]
 pub const SERVICES: &[ServiceDef] = &[
     ServiceDef { key: "apache", name: "Apache", dir: "apache", exe: r"bin\httpd.exe", default_port: 80, default_on: true, multi: false },
     ServiceDef { key: "mysql", name: "MySQL", dir: "mysql", exe: r"bin\mysqld.exe", default_port: 3306, default_on: true, multi: true },
@@ -34,6 +35,21 @@ pub const SERVICES: &[ServiceDef] = &[
     ServiceDef { key: "postgres", name: "PostgreSQL", dir: "postgresql", exe: r"bin\postgres.exe", default_port: 5432, default_on: false, multi: true },
     // 3307 so it runs beside MySQL (3306).
     ServiceDef { key: "mariadb", name: "MariaDB", dir: "mariadb", exe: r"bin\mariadbd.exe", default_port: 3307, default_on: false, multi: true },
+];
+
+// Linux and macOS (preview): the same kinds, run from the programs the package manager installed, linked into
+// <root>/bin/<kind>/<version>-system (see platform/systools.rs). Apache listens on 8080: ports below 1024 need root.
+#[cfg(unix)]
+pub const SERVICES: &[ServiceDef] = &[
+    ServiceDef { key: "apache", name: "Apache", dir: "apache", exe: "bin/httpd", default_port: 8080, default_on: true, multi: false },
+    ServiceDef { key: "mysql", name: "MySQL", dir: "mysql", exe: "bin/mysqld", default_port: 3306, default_on: true, multi: true },
+    ServiceDef { key: "nginx", name: "Nginx", dir: "nginx", exe: "nginx", default_port: 8081, default_on: false, multi: false },
+    ServiceDef { key: "redis", name: "Redis", dir: "redis", exe: "redis-server", default_port: 6379, default_on: false, multi: true },
+    ServiceDef { key: "memcached", name: "Memcached", dir: "memcached", exe: "memcached", default_port: 11211, default_on: false, multi: true },
+    ServiceDef { key: "php", name: "PHP Server", dir: "php", exe: "php", default_port: 8000, default_on: false, multi: true },
+    ServiceDef { key: "mailpit", name: "Mailpit", dir: "mailpit", exe: "mailpit", default_port: 1025, default_on: true, multi: true },
+    ServiceDef { key: "postgres", name: "PostgreSQL", dir: "postgresql", exe: "bin/postgres", default_port: 5432, default_on: false, multi: true },
+    ServiceDef { key: "mariadb", name: "MariaDB", dir: "mariadb", exe: "bin/mariadbd", default_port: 3307, default_on: false, multi: true },
 ];
 
 /// Mailpit's own web page port (estimated: Mailpit's default). An extra Mailpit uses its SMTP port + 7000.
@@ -52,15 +68,25 @@ pub fn image(key: &str) -> String {
     Path::new(def(key).exe).file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()
 }
 
-pub fn hide_window(cmd: &mut Command) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+/// No console window for the programs Ninho starts (Windows; nothing to do elsewhere).
+pub use crate::platform::hide_window;
+
+/// Folder a MySQL / MariaDB build calls home (--basedir): the version folder on Windows; on Linux and macOS the
+/// folder the linked system program really lives in (/usr for /usr/sbin/mysqld), where its share files are.
+pub fn basedir(vdir: &Path, exe_rel: &str) -> PathBuf {
+    #[cfg(unix)]
+    if let Some(b) = std::fs::canonicalize(vdir.join(exe_rel)).ok().and_then(|real| real.parent().and_then(Path::parent).map(Path::to_path_buf)) {
+        return b;
     }
-    #[cfg(not(windows))]
-    let _ = cmd;
+    let _ = exe_rel;
+    vdir.to_path_buf()
+}
+
+/// Linux and macOS: the Unix socket of a MySQL / MariaDB / PostgreSQL server, in the temporary folder (the
+/// system default under /run belongs to root).
+#[cfg(unix)]
+pub fn socket_dir() -> PathBuf {
+    std::env::temp_dir()
 }
 
 /// Version folders installed for a kind, oldest name first.
@@ -233,13 +259,13 @@ fn mysql_datadir(ini: &Path) -> Option<String> {
         .map(str::trim)
         .find(|l| l.to_ascii_lowercase().starts_with("datadir"))
         .and_then(|l| l.split_once('='))
-        .map(|(_, v)| v.trim().trim_matches('"').replace('/', "\\"))
+        .map(|(_, v)| crate::platform::native_slashes(v.trim().trim_matches('"')))
 }
 
 /// Data folder of a MySQL server: its own for an extra one, the one in my.ini for the first.
 pub fn mysql_data(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Option<String> {
     if c.is_extra() {
-        Some(if c.data_dir.is_empty() { format!(r"{}\data\{}", s.root, c.id) } else { c.data_dir.clone() })
+        Some(if c.data_dir.is_empty() { crate::platform::join(&s.root, &["data", &c.id]) } else { c.data_dir.clone() })
     } else {
         mysql_datadir(&vdir.join("my.ini"))
     }
@@ -283,13 +309,17 @@ pub fn engine_init(shared: &Shared, lang: Lang, key: &str, vdir: &Path, data: &s
     let bin = vdir.join("bin");
     let mut c = match key {
         "postgres" => {
-            let mut c = Command::new(bin.join("initdb.exe"));
+            let mut c = Command::new(bin.join(crate::platform::exe("initdb")));
             c.args(["-D", data, "-U", "postgres", "-A", "trust", "-E", "UTF8"]);
             c
         }
         _ => {
-            let mut c = Command::new(bin.join("mariadb-install-db.exe"));
+            let mut c = Command::new(bin.join(crate::platform::exe("mariadb-install-db")));
             c.arg(format!("--datadir={data}")).arg(format!("--port={port}"));
+            // Linux and macOS: root without a password over TCP, like on Windows (the default is the Unix socket
+            // login of the system user root, which Ninho's tools never use).
+            #[cfg(unix)]
+            c.arg(format!("--basedir={}", basedir(vdir, "bin/mariadbd").display())).arg("--auth-root-authentication-method=normal").arg("--skip-test-db");
             c
         }
     };
@@ -319,8 +349,8 @@ fn mysql_init(shared: &Shared, lang: Lang, vdir: &Path, data: &str) -> bool {
         return false;
     }
     shared.say(format!("MySQL: {} {data}...", tr(lang, "log_data_creating")));
-    let mut c = Command::new(vdir.join(r"bin\mysqld.exe"));
-    c.args(["--no-defaults", "--initialize-insecure", &format!("--basedir={}", vdir.display()), &format!("--datadir={data}")]);
+    let mut c = Command::new(vdir.join("bin").join(crate::platform::exe("mysqld")));
+    c.args(["--no-defaults", "--initialize-insecure", &format!("--basedir={}", basedir(vdir, "bin/mysqld").display()), &format!("--datadir={data}")]);
     hide_window(&mut c);
     match c.output() {
         Ok(o) if o.status.success() => true,
@@ -400,7 +430,13 @@ pub fn apache_setup(s: &Settings, vdir: &Path) -> Result<(), String> {
     }
     // conf/ninho.conf
     let mut n = vec!["# Written by Ninho at every Apache start. Put your own settings in httpd.conf.".to_string()];
-    match version_dir(s, "php") {
+    // Linux and macOS: the system Apache uses the system's own mod_php, loaded in httpd.conf (systools.rs).
+    let php_dir = if cfg!(windows) { version_dir(s, "php") } else { None };
+    if cfg!(unix) {
+        n.push("# PHP: the system's mod_php, when there is one, is loaded in httpd.conf.".into());
+    }
+    match php_dir {
+        _ if cfg!(unix) => {}
         Some(php) => {
             let module = std::fs::read_dir(&php).ok().and_then(|rd| {
                 rd.filter_map(|e| e.ok()).map(|e| e.path()).find(|p| {
@@ -468,8 +504,13 @@ fn build_command(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Command {
             let ini = vdir.join("my.ini");
             if ini.is_file() {
                 cmd.arg(format!("--defaults-file={}", ini.display()));
+            } else if cfg!(unix) {
+                // Never the system's /etc/my.cnf: it points at the system's data folder and sockets.
+                cmd.arg("--no-defaults");
             }
             cmd.arg(format!("--port={port}"));
+            #[cfg(unix)]
+            cmd.arg(format!("--socket={}", socket_dir().join(format!("ninho-mysql-{port}.sock")).display()));
             if let Some(data) = mysql_data(s, c, vdir) {
                 if c.is_extra() {
                     // Its own data, and no second "X protocol" port (33060 belongs to the first MySQL).
@@ -477,13 +518,15 @@ fn build_command(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Command {
                     cmd.arg("--mysqlx=OFF");
                 }
                 // Error log beside the data.
-                cmd.arg(format!("--log-error={data}\\mysqld.log"));
+                cmd.arg(format!("--log-error={}", crate::platform::join(&data, &["mysqld.log"])));
             }
         }
         "postgres" => {
             // Started directly (pg_ctl start would keep our pipes); only on this PC.
             let data = engine_data(s, c, vdir);
             cmd.args(["-D", &data, "-p", &port.to_string(), "-c", "listen_addresses=127.0.0.1"]);
+            #[cfg(unix)]
+            cmd.arg("-k").arg(socket_dir());
             cmd.stdin(Stdio::null()).stdout(Stdio::null());
             match std::fs::OpenOptions::new().create(true).append(true).open(Path::new(&data).join("postgres.log")) {
                 Ok(f) => cmd.stderr(Stdio::from(f)),
@@ -497,9 +540,13 @@ fn build_command(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Command {
             let ini = Path::new(&data).join("my.ini");
             if ini.is_file() {
                 cmd.arg(format!("--defaults-file={}", ini.display()));
+            } else if cfg!(unix) {
+                cmd.arg("--no-defaults");
             }
-            cmd.arg(format!("--datadir={data}")).arg(format!("--basedir={}", vdir.display()));
+            cmd.arg(format!("--datadir={data}")).arg(format!("--basedir={}", basedir(vdir, "bin/mariadbd").display()));
             cmd.arg(format!("--port={port}")).arg("--bind-address=127.0.0.1");
+            #[cfg(unix)]
+            cmd.arg(format!("--socket={}", socket_dir().join(format!("ninho-mariadb-{port}.sock")).display()));
             cmd.arg(format!("--log-error={}", Path::new(&data).join("mariadb.log").display()));
         }
         "redis" => {
@@ -510,6 +557,12 @@ fn build_command(s: &Settings, c: &ServiceCfg, vdir: &Path) -> Command {
         }
         "memcached" => {
             cmd.args(["-p", &port.to_string()]);
+        }
+        // Linux and macOS: the system Apache with Ninho's own config folder, in the foreground (so it is our child
+        // and stops with us), as this user.
+        #[cfg(unix)]
+        "apache" => {
+            cmd.arg("-d").arg(vdir).arg("-f").arg(vdir.join("conf").join("httpd.conf")).arg("-DFOREGROUND");
         }
         "php" => {
             let root = if c.data_dir.is_empty() { &s.doc_root } else { &c.data_dir };
@@ -540,7 +593,7 @@ pub fn start(shared: &Arc<Shared>, s: &Settings, id: &str) {
         return;
     }
     let Some(vdir) = version_dir(s, id) else {
-        shared.say(format!("{name}: {} {}\\bin\\{}", tr(lang, "log_not_installed_in"), s.root, d.dir));
+        shared.say(format!("{name}: {} {}", tr(lang, "log_not_installed_in"), crate::platform::join(&s.root, &["bin", d.dir])));
         return;
     };
     if port_open(port) {
@@ -569,7 +622,7 @@ pub fn start(shared: &Arc<Shared>, s: &Settings, id: &str) {
         if let Err(e) = apache_setup(s, &vdir) {
             shared.say(format!("Apache: {e}"));
         }
-        apache_set_port(&vdir.join(r"conf\httpd.conf"), port);
+        apache_set_port(&vdir.join("conf").join("httpd.conf"), port);
         crate::sites::refresh(shared, s, false);
     }
     if c.key == "nginx" {
@@ -604,26 +657,26 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
     // Polite stop first.
     match (c.key.as_str(), &vdir) {
         ("nginx", Some(v)) => {
-            let mut cmd = Command::new(v.join("nginx.exe"));
+            let mut cmd = Command::new(v.join(crate::platform::exe("nginx")));
             cmd.args(["-s", "stop"]).current_dir(v);
             hide_window(&mut cmd);
             let _ = cmd.output();
         }
         ("postgres", Some(v)) => {
             let data = engine_data(s, &c, v);
-            let mut cmd = Command::new(v.join("bin").join("pg_ctl.exe"));
+            let mut cmd = Command::new(v.join("bin").join(crate::platform::exe("pg_ctl")));
             cmd.args(["-D", &data, "stop", "-m", "fast", "-t", "20"]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
             hide_window(&mut cmd);
             let _ = cmd.output();
         }
         ("mariadb", Some(v)) => {
-            let mut cmd = Command::new(v.join("bin").join("mariadb-admin.exe"));
+            let mut cmd = Command::new(v.join("bin").join(crate::platform::exe("mariadb-admin")));
             cmd.args(["--no-defaults", "-h", "127.0.0.1", "-P", &port.to_string(), "-u", "root", "shutdown"]);
             hide_window(&mut cmd);
             let _ = cmd.output();
         }
         ("mysql", Some(v)) => {
-            let mut cmd = Command::new(v.join(r"bin\mysqladmin.exe"));
+            let mut cmd = Command::new(v.join("bin").join(crate::platform::exe("mysqladmin")));
             cmd.args(["-u", "root", "-h", "127.0.0.1", &format!("--port={port}"), "shutdown"]);
             hide_window(&mut cmd);
             let _ = cmd.output();
@@ -665,7 +718,7 @@ pub fn stop(shared: &Arc<Shared>, s: &Settings, id: &str) {
 /// Run a short command line tool from MySQL's folder (create database...) against one MySQL server.
 pub fn mysql_exec(s: &Settings, id: &str, sql: &str, password: &str) -> Result<(), String> {
     let v = version_dir(s, id).ok_or("MySQL is not installed")?;
-    let mut c = Command::new(v.join(r"bin\mysql.exe"));
+    let mut c = Command::new(v.join("bin").join(crate::platform::exe("mysql")));
     c.args(["-u", "root", "-h", "127.0.0.1", &format!("--port={}", s.svc(id).port)]);
     // Password through the environment: the command line is visible to every program on the PC.
     if !password.is_empty() {
@@ -681,21 +734,9 @@ pub fn mysql_exec(s: &Settings, id: &str, sql: &str, password: &str) -> Result<(
     }
 }
 
-/// PATH with the installed tools first, for terminals and project commands.
-/// The PC's offset from UTC in minutes, asked to Windows once (std has no time zones).
-fn utc_offset_min() -> i64 {
-    static OFFSET: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
-    *OFFSET.get_or_init(|| {
-        let mut c = Command::new("powershell");
-        c.args(["-NoProfile", "-Command", "[int][TimeZoneInfo]::Local.GetUtcOffset([DateTime]::Now).TotalMinutes"]);
-        hide_window(&mut c);
-        c.output().ok().and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok()).unwrap_or(0)
-    })
-}
-
 /// Local time as HH:MM:SS, for the activity list.
 pub fn clock() -> String {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) + utc_offset_min() * 60;
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) + crate::platform::utc_offset_min() * 60;
     let d = secs.rem_euclid(86_400);
     format!("{:02}:{:02}:{:02}", d / 3600, d / 60 % 60, d % 60)
 }
@@ -740,6 +781,7 @@ pub fn pids(shared: &Shared, s: &Settings, id: &str) -> Vec<u32> {
     v
 }
 
+/// PATH with the installed tools first, for terminals and project commands.
 pub fn tool_path(s: &Settings) -> String {
     let mut parts: Vec<String> = Vec::new();
     for key in ["php", "apache", "nginx", "redis"] {
@@ -750,17 +792,17 @@ pub fn tool_path(s: &Settings) -> String {
     if let Some(v) = version_dir(s, "mysql") {
         parts.push(v.join("bin").to_string_lossy().into_owned());
     }
-    for extra in [r"bin\composer", r"bin\git\cmd", r"bin\git\bin"] {
-        let p = Path::new(&s.root).join(extra);
+    for extra in [&["bin", "composer"][..], &["bin", "git", "cmd"], &["bin", "git", "bin"]] {
+        let p = extra.iter().fold(PathBuf::from(&s.root), |p, x| p.join(x));
         if p.is_dir() {
             parts.push(p.to_string_lossy().into_owned());
         }
     }
-    if let Ok(node) = std::fs::read_dir(Path::new(&s.root).join(r"bin\nodejs")) {
+    if let Ok(node) = std::fs::read_dir(Path::new(&s.root).join("bin").join("nodejs")) {
         if let Some(n) = node.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()).max() {
             parts.push(n.to_string_lossy().into_owned());
         }
     }
     parts.push(std::env::var("PATH").unwrap_or_default());
-    parts.join(";")
+    parts.join(crate::platform::PATH_SEP)
 }

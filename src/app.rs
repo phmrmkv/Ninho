@@ -22,6 +22,7 @@ use crate::settings::{self, ServiceCfg, Settings, hostname_format_check, name_ok
 use crate::share;
 use crate::sites;
 use crate::templates;
+use crate::platform;
 use crate::tray;
 
 // ---------- Theme: semantic color tokens (light / dark), control sizes, one button recipe ----------
@@ -483,14 +484,11 @@ impl NinhoApp {
     }
 
     fn terminal(&self) {
-        let cmder = Path::new(&self.s.root).join(r"bin\cmder\Cmder.exe");
-        if cmder.is_file() {
+        let cmder = Path::new(&self.s.root).join("bin").join("cmder").join("Cmder.exe");
+        if cfg!(windows) && cmder.is_file() {
             let _ = std::process::Command::new(cmder).args(["/START", &self.s.doc_root]).spawn();
         } else {
-            let _ = std::process::Command::new("cmd")
-                .args(["/c", "start", "", "cmd", "/k", &format!("cd /d \"{}\"", self.s.doc_root)])
-                .env("PATH", services::tool_path(&self.s))
-                .spawn();
+            platform::terminal(&self.s.doc_root, &services::tool_path(&self.s));
         }
     }
 
@@ -555,7 +553,7 @@ impl NinhoApp {
         self.nn_port = free_port(&self.s, d.default_port + 1).to_string();
         let id = self.s.next_id(&self.nn_kind);
         self.nn_dir = match d.key {
-            "mysql" => format!(r"{}\data\{id}", self.s.root),
+            "mysql" => platform::join(&self.s.root, &["data", &id]),
             "php" => self.s.doc_root.clone(),
             _ => String::new(),
         };
@@ -637,12 +635,9 @@ impl NinhoApp {
                 shared.say(format!("{name}: {}", self.t("project_created")));
             }
             Some(script) => {
-                let script = format!("{script} && echo. && echo {}", self.t("project_done"));
-                let _ = std::process::Command::new("cmd")
-                    .args(["/c", "start", &format!("{} - {name}", t.name), "cmd", "/k", &script])
-                    .current_dir(&s.doc_root)
-                    .env("PATH", path_env)
-                    .spawn();
+                let blank_line = if cfg!(windows) { "echo." } else { "echo" };
+                let script = format!("{script} && {blank_line} && echo {}", self.t("project_done"));
+                platform::terminal_run(&format!("{} - {name}", t.name), &script, Some(Path::new(&s.doc_root)), Some(&path_env));
                 shared.say(self.t("after_download"));
             }
         }
@@ -886,7 +881,9 @@ impl NinhoApp {
                         ui.close();
                     }
                     if ui.button(self.t("hosts_file")).clicked() {
-                        edit_hosts();
+                        if let Some(cmd) = platform::edit_hosts() {
+                            self.shared.say(format!("{} {cmd}", self.t("log_hosts_run")));
+                        }
                         ui.close();
                     }
                     if ui.button(self.t("open_log")).clicked() {
@@ -1501,17 +1498,9 @@ impl NinhoApp {
                     self.shared.say(format!("{folder}: {}", self.t("unshared")));
                 }
                 "folder" => open(&dir.to_string_lossy()),
-                "terminal" => {
-                    let _ = std::process::Command::new("cmd")
-                        .args(["/c", "start", "", "cmd", "/k", &format!("cd /d \"{}\"", dir.display())])
-                        .env("PATH", self.site_path(&cfg))
-                        .spawn();
-                }
+                "terminal" => platform::terminal(&dir.display().to_string(), &self.site_path(&cfg)),
                 _ => {
-                    let mut c = std::process::Command::new("cmd");
-                    c.args(["/c", "code", "."]).current_dir(&dir).env("PATH", self.site_path(&cfg));
-                    services::hide_window(&mut c);
-                    if c.spawn().is_err() {
+                    if !platform::code(&dir, &self.site_path(&cfg)) {
                         self.shared.say(self.t("no_code"));
                     }
                 }
@@ -1694,7 +1683,7 @@ impl NinhoApp {
             if go {
                 let root = self.wl_root.trim().trim_end_matches(['\\', '/']).to_string();
                 if !root.is_empty() && root != self.s.root {
-                    self.s.doc_root = format!("{root}\\www");
+                    self.s.doc_root = platform::join(&root, &["www"]);
                     self.s.root = root;
                 }
                 for sub in ["bin", "data", "www", "tmp", "etc"] {
@@ -2038,7 +2027,7 @@ impl NinhoApp {
     /// Serve one site with its own PHP server (its PHP version, its port), like a per-site PHP in Herd.
     fn serve_site(&mut self, folder: &str, cfg: &settings::SiteCfg) {
         let php_dir = if cfg.php.is_empty() { services::version_dir(&self.s, "php") } else { Some(Path::new(&self.s.root).join("bin").join("php").join(&cfg.php)) };
-        let Some(php_dir) = php_dir.filter(|d| d.join("php.exe").is_file()) else {
+        let Some(php_dir) = php_dir.filter(|d| d.join(platform::exe("php")).is_file()) else {
             self.shared.say(self.t("need_php_site"));
             return;
         };
@@ -2047,7 +2036,7 @@ impl NinhoApp {
             return;
         }
         let root = sites::web_root(&Path::new(&self.s.doc_root).join(folder));
-        let mut cmd = std::process::Command::new(php_dir.join("php.exe"));
+        let mut cmd = std::process::Command::new(php_dir.join(platform::exe("php")));
         cmd.args(["-S", &format!("127.0.0.1:{}", cfg.port), "-t"]).arg(&root).current_dir(&root);
         cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
         services::hide_window(&mut cmd);
@@ -2069,7 +2058,7 @@ impl NinhoApp {
         let lang = s.language;
         std::thread::spawn(move || {
             if on {
-                let Some(openssl) = services::version_dir(&s, "apache").map(|v| v.join("bin").join("openssl.exe")).filter(|p| p.is_file()) else {
+                let Some(openssl) = services::version_dir(&s, "apache").map(|v| v.join("bin").join(platform::exe("openssl"))).filter(|p| p.is_file()) else {
                     shared.say(format!("HTTPS: {}", tr(lang, "log_https_need_apache")));
                     return;
                 };
@@ -2353,15 +2342,15 @@ impl NinhoApp {
             "mailpit" => open(&format!("http://localhost:{}", services::mailpit_web_port(&c))),
             "redis" => {
                 if let Some(v) = services::version_dir(&self.s, id) {
-                    let cli = v.join("redis-cli.exe");
-                    let _ = std::process::Command::new("cmd").args(["/c", "start", "Redis", "cmd", "/k"]).arg(format!("\"{}\" -p {}", cli.display(), c.port)).spawn();
+                    let cli = v.join(platform::exe("redis-cli"));
+                    platform::terminal_run("Redis", &format!("{} -p {}", platform::quote(&cli.display().to_string()), c.port), None, None);
                 }
             }
             "mysql" | "mariadb" => self.mysql_admin(&c),
             "postgres" => {
                 if let Some(v) = services::version_dir(&self.s, id) {
-                    let psql = v.join("bin").join("psql.exe");
-                    let _ = std::process::Command::new("cmd").args(["/c", "start", "PostgreSQL", "cmd", "/k"]).arg(format!("\"{}\" -h 127.0.0.1 -p {} -U postgres", psql.display(), c.port)).spawn();
+                    let psql = v.join("bin").join(platform::exe("psql"));
+                    platform::terminal_run("PostgreSQL", &format!("{} -h 127.0.0.1 -p {} -U postgres", platform::quote(&psql.display().to_string()), c.port), None, None);
                 }
             }
             _ => {}
@@ -2370,7 +2359,7 @@ impl NinhoApp {
 
     /// MySQL admin: HeidiSQL when present; else Adminer (one PHP file, from adminer.org) served by the installed PHP.
     fn mysql_admin(&mut self, c: &ServiceCfg) {
-        let heidi = Path::new(&self.s.root).join(r"bin\heidisql\heidisql.exe");
+        let heidi = Path::new(&self.s.root).join("bin").join("heidisql").join("heidisql.exe");
         if heidi.is_file() {
             let _ = std::process::Command::new(heidi).spawn();
             return;
@@ -2381,12 +2370,13 @@ impl NinhoApp {
         };
         let (shared, root, mysql_port, lang) = (self.shared.clone(), self.s.root.clone(), c.port, self.s.language);
         std::thread::spawn(move || {
-            let dir = Path::new(&root).join(r"bin\adminer");
+            let dir = Path::new(&root).join("bin").join("adminer");
             let file = dir.join("index.php");
             if !file.is_file() {
                 let _ = std::fs::create_dir_all(&dir);
                 shared.say(format!("Adminer: {} https://www.adminer.org/latest-mysql-en.php", tr(lang, "log_downloading")));
-                let ok = std::process::Command::new(r"C:\Windows\System32\curl.exe")
+                let curl = if cfg!(windows) { PathBuf::from(r"C:\Windows\System32\curl.exe") } else { platform::curl() };
+                let ok = std::process::Command::new(curl)
                     .args(["-L", "-f", "-s", "-o"])
                     .arg(&file)
                     .arg("https://www.adminer.org/latest-mysql-en.php")
@@ -2401,7 +2391,7 @@ impl NinhoApp {
             // One Adminer for all the MySQL servers, on its own port, started once.
             let port = 8099u16;
             if !services::port_open(port) {
-                let mut cmd = std::process::Command::new(php.join("php.exe"));
+                let mut cmd = std::process::Command::new(php.join(platform::exe("php")));
                 cmd.args(["-S", &format!("127.0.0.1:{port}"), "-t"]).arg(&dir);
                 cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
                 services::hide_window(&mut cmd);
@@ -2499,7 +2489,7 @@ impl NinhoApp {
             .map(|l| match mine.get(&l.port) {
                 Some((id, t, img)) if l.program.to_ascii_lowercase() == *img => (l, format!("Ninho: {t}"), Some(id.clone())),
                 Some((_, t, _)) => (l, format!("{} {t}", self.t("blocks")), None),
-                None if ports::is_system(&l.program, l.pid) => (l, "Windows".to_string(), None),
+                None if ports::is_system(&l.program, l.pid) => (l, platform::SYSTEM_WORD.to_string(), None),
                 None => (l, ports::hint(l.port).to_string(), None),
             })
             .filter(|(l, who, _)| query.is_empty() || l.port.to_string().contains(&query) || l.program.to_lowercase().contains(&query) || who.to_lowercase().contains(&query))
@@ -2571,6 +2561,10 @@ impl NinhoApp {
             .pivot(egui::Align2::CENTER_CENTER).default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 ui.label(RichText::new(self.t("updates_hint")).size(12.0).color(muted()));
+                // Linux and macOS (preview): where the servers come from, and why Apache is on 8080.
+                if cfg!(unix) {
+                    ui.label(RichText::new(self.t("unix_updates_note")).size(12.0).color(amber()));
+                }
                 ui.add_space(6.0);
                 egui::Grid::new("upd").num_columns(4).striped(true).spacing([14.0, 8.0]).show(ui, |ui| {
                     for h in ["tool", "installed", "latest", ""] {
@@ -2586,6 +2580,8 @@ impl NinhoApp {
                         match &latest {
                             None => ui.label(RichText::new(self.t("checking")).size(12.5).color(muted())),
                             Some(Ok(v)) => ui.label(RichText::new(short_ver(v)).strong().color(brand())),
+                            // Linux and macOS: not installed on this computer; the hover has the command that installs it.
+                            Some(Err(e)) if cfg!(unix) => ui.label(RichText::new(self.t("unix_missing")).size(12.5).color(amber())).on_hover_text(e),
                             Some(Err(e)) => ui.label(RichText::new(self.t("offline")).size(12.5).color(bad())).on_hover_text(e),
                         };
                         let up_to_date = matches!(&latest, Some(Ok(v)) if install::is_up_to_date(&have, v));
@@ -2604,7 +2600,7 @@ impl NinhoApp {
                 });
                 ui.add_space(6.0);
                 ui.label(RichText::new(self.t("mysql_lts_hint")).size(12.0).color(muted()));
-                ui.label(RichText::new(format!("Nginx, Memcached: {}", self.t("by_hand"))).size(12.0).color(muted()));
+                ui.label(RichText::new(format!("{}: {}", if cfg!(windows) { "Nginx, Memcached" } else { "Nginx" }, self.t("by_hand"))).size(12.0).color(muted()));
                 ui.add_space(4.0);
                 if ui.add(button(self.t("check_new_versions"), Tone::Neutral, CONTROL_SM)).clicked() {
                     self.check_updates();
@@ -2780,7 +2776,9 @@ impl NinhoApp {
                         ui.checkbox(&mut self.draft.check_updates, tr(lang, "check_updates"));
                         ui.separator();
                         // Portable or installed: one exe either way.
-                        if crate::selfinstall::is_installed_copy() {
+                        if !crate::selfinstall::AVAILABLE {
+                            ui.label(RichText::new(tr(lang, "install_app_unavailable")).size(12.5).color(muted()));
+                        } else if crate::selfinstall::is_installed_copy() {
                             ui.label(RichText::new(format!("{} {}", tr(lang, "installed_at"), crate::selfinstall::install_dir().display())).size(12.5).color(muted()));
                             ui.label(RichText::new(tr(lang, "uninstall_hint")).size(12.0).color(muted()));
                         } else {
@@ -3254,7 +3252,7 @@ fn sync_ports(shared: &Shared, s: &Settings) {
 }
 
 fn open(target: &str) {
-    let _ = std::process::Command::new("explorer").arg(target).spawn();
+    platform::open(target);
 }
 
 /// egui's own colors and spacing from the tokens (called again when the theme changes).
@@ -3325,49 +3323,28 @@ fn fill(text: &str, pairs: &[(&str, &str)]) -> String {
     s
 }
 
-/// Windows' own "choose a folder" dialog, on a thread so the window does not freeze. The folder lands in \`slot\` with
-/// the \`tag\` of the field that asked for it; \`busy\` is true while the dialog is open.
+/// The system's "choose a folder" dialog, on a thread so the window does not freeze. The folder lands in `slot` with
+/// the `tag` of the field that asked for it; `busy` is true while the dialog is open.
 fn pick_folder(slot: Arc<std::sync::Mutex<Option<(String, PathBuf)>>>, busy: Arc<AtomicBool>, tag: &str, start: &str, ctx: egui::Context) {
     busy.store(true, Ordering::SeqCst);
-    let (tag, start) = (tag.to_string(), start.replace('\'', "''"));
+    let (tag, start) = (tag.to_string(), start.to_string());
     std::thread::spawn(move || {
-        let ps = format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.SelectedPath = '{start}'; $d.ShowNewFolderButton = $true; if ($d.ShowDialog() -eq 'OK') {{ $d.SelectedPath }}");
-        let mut c = std::process::Command::new("powershell");
-        c.args(["-NoProfile", "-STA", "-Command", &ps]);
-        services::hide_window(&mut c);
-        if let Ok(out) = c.output() {
-            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !p.is_empty() {
-                *slot.lock().unwrap() = Some((tag, PathBuf::from(p)));
-            }
+        if let Some(p) = platform::pick_folder(&start) {
+            *slot.lock().unwrap() = Some((tag, PathBuf::from(p)));
         }
         busy.store(false, Ordering::SeqCst);
         ctx.request_repaint();
     });
 }
 
-/// A text file (config, log) in Notepad.
+/// A text file (config, log) in the system's text editor (Notepad on Windows).
 fn open_text(file: &Path) {
-    let _ = std::process::Command::new("notepad").arg(file).spawn();
+    platform::open_text(file);
 }
 
-/// The Windows hosts file in Notepad as administrator (Windows asks for permission; saving needs it).
-fn edit_hosts() {
-    let mut c = std::process::Command::new("powershell");
-    c.args(["-NoProfile", "-Command", "Start-Process notepad -Verb RunAs -ArgumentList \"$env:SystemRoot\\System32\\drivers\\etc\\hosts\""]);
-    services::hide_window(&mut c);
-    let _ = c.spawn();
-}
-
-/// Windows' own "open file" dialog for a .sql file (no extra crate needed).
+/// The system's own "open file" dialog for a .sql file (no extra crate needed).
 fn pick_sql_file() -> Option<PathBuf> {
-    let ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Filter = 'SQL (*.sql)|*.sql'; if ($d.ShowDialog() -eq 'OK') { $d.FileName }";
-    let mut c = std::process::Command::new("powershell");
-    c.args(["-NoProfile", "-STA", "-Command", ps]);
-    services::hide_window(&mut c);
-    let out = c.output().ok()?;
-    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if p.is_empty() { None } else { Some(PathBuf::from(p)) }
+    platform::pick_sql_file()
 }
 
 /// A web page in the default browser.

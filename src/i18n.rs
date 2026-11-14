@@ -72,21 +72,9 @@ impl Lang {
         };
         LOCALES.iter().position(|l| l.0.eq_ignore_ascii_case(pick)).map(Lang).unwrap_or(Lang(0))
     }
-    /// The language Windows shows its menus in (first start).
+    /// The language the system shows its menus in (first start).
     pub fn system() -> Lang {
-        #[cfg(windows)]
-        {
-            #[link(name = "kernel32")]
-            unsafe extern "system" {
-                fn GetUserDefaultLocaleName(name: *mut u16, len: i32) -> i32;
-            }
-            let mut buf = [0u16; 85];
-            let n = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
-            if n > 1 {
-                return Lang::from_code(&String::from_utf16_lossy(&buf[..(n - 1) as usize]));
-            }
-        }
-        Lang(0)
+        crate::platform::locale().map(|c| Lang::from_code(&c)).unwrap_or(Lang(0))
     }
 }
 
@@ -160,20 +148,19 @@ pub fn moods(lang: Lang) -> &'static (Vec<String>, Vec<String>) {
     &all[lang.0.min(all.len() - 1)]
 }
 
-/// Give egui a font for writing systems its own fonts don't cover (CJK, Devanagari), from the Windows fonts folder.
+/// Give egui a font for writing systems its own fonts don't cover (CJK, Devanagari), from the system's fonts.
 /// Latin, Cyrillic and Vietnamese are covered by egui's own fonts.
 pub fn install_fonts(ctx: &egui::Context, lang: Lang) {
-    let candidates: &[&str] = match LOCALES[lang.0].3 {
-        Script::Latin => &[],
-        Script::Japanese => &["YuGothM.ttc", "meiryo.ttc", "msgothic.ttc"],
-        Script::Korean => &["malgun.ttf", "gulim.ttc"],
-        Script::ChineseSimplified => &["msyh.ttc", "simsun.ttc"],
-        Script::ChineseTraditional => &["msjh.ttc", "mingliu.ttc"],
-        Script::Devanagari => &["Nirmala.ttc", "Nirmala.ttf", "mangal.ttf"],
+    let script = match LOCALES[lang.0].3 {
+        Script::Latin => "",
+        Script::Japanese => "ja",
+        Script::Korean => "ko",
+        Script::ChineseSimplified => "zh-CN",
+        Script::ChineseTraditional => "zh-TW",
+        Script::Devanagari => "hi",
     };
     let mut defs = egui::FontDefinitions::default();
-    let fonts = std::path::Path::new(&std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into())).join("Fonts");
-    if let Some(bytes) = candidates.iter().find_map(|f| std::fs::read(fonts.join(f)).ok()) {
+    if let Some(bytes) = crate::platform::font_files(script).iter().find_map(|f| std::fs::read(f).ok()) {
         defs.font_data.insert("system-script".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
         for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
             defs.families.entry(family).or_default().push("system-script".into());

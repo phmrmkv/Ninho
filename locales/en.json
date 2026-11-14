@@ -373,5 +373,11 @@
   "sites_count_one": "site",
   "sites_count_many": "sites",
   "create_db_go": "Create database",
-  "import_none_here": "Nothing to import in that folder."
+  "import_none_here": "Nothing to import in that folder.",
+  "unix_not_found": "not found on this computer. Install it with your package manager, then click Install again: {cmd}",
+  "unix_using_system": "using the one installed on this computer:",
+  "log_hosts_run": "To change the hosts file, run in a terminal (it asks for your password):",
+  "unix_updates_note": "Linux and macOS (preview): Apache, PHP, MySQL, MariaDB, PostgreSQL and Redis come from your package manager (apt, dnf, Homebrew); Install uses the one on this computer, with Ninho's own settings, data and ports. Mailpit and Node.js are downloaded from their official sites. Servers run as you, so Apache listens on 8080: ports below 1024 need administrator rights.",
+  "unix_missing": "not on this computer",
+  "install_app_unavailable": "Installing is not available on macOS yet: run Ninho from any folder."
 }

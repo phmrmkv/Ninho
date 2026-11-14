@@ -2,6 +2,10 @@
 #   Ninho-x64.exe  (Windows 10/11 64-bit)
 #   Ninho-x86.exe  (32-bit Windows; some servers have no 32-bit build, Ninho says which)
 # The C runtime is linked in (crt-static), so each exe runs on a clean Windows with nothing to install.
+# Linux and macOS (preview) get single programs too, named the way the self-update looks for them:
+#   Ninho-linux-x64    (built on Ubuntu 22.04, so it runs on glibc 2.35 and newer)
+#   Ninho-macos-arm64  (Apple silicon)
+#   Ninho-macos-x64    (Intel Macs)
 name: Release
 
 on:
@@ -70,22 +74,64 @@ jobs:
           path: ${{ matrix.name }}
           overwrite: true
 
+  build-unix:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: Ninho-linux-x64
+            test: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: Ninho-macos-arm64
+            test: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: Ninho-macos-x64
+            test: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+      - name: Test
+        if: matrix.test
+        run: cargo test --release --target ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Name the program
+        run: |
+          cp target/${{ matrix.target }}/release/ninho ${{ matrix.name }}
+          chmod +x ${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+
   release:
-    needs: build
+    needs: [build, build-unix]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
       - name: SHA-256 of each file
-        run: sha256sum Ninho-*.exe > SHA256SUMS.txt
+        run: sha256sum Ninho-* > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             Ninho-x64.exe
             Ninho-x86.exe
+            Ninho-linux-x64
+            Ninho-macos-arm64
+            Ninho-macos-x64
             SHA256SUMS.txt
           generate_release_notes: true
           body: |
             Download `Ninho-x64.exe` (64-bit Windows) or `Ninho-x86.exe` (32-bit) and check it against `SHA256SUMS.txt`.
+            Linux and macOS (preview): `Ninho-linux-x64`, `Ninho-macos-arm64` (Apple silicon) or `Ninho-macos-x64` (Intel); run `chmod +x` on it first. On macOS, right-click > Open the first time (the program is not notarized).
             [Code signing policy](https://github.com/phmrmkv/Ninho#code-signing-policy) · [Privacy](https://github.com/phmrmkv/Ninho#privacy)
