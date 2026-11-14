@@ -99,8 +99,10 @@ Coming from Laragon? Put `Ninho.exe` in `C:\laragon`: your `bin`, `data\mysql-8.
 ## Linux and macOS (preview)
 
 Ninho also runs on Linux (x64) and macOS (Apple silicon and Intel). This is a **preview**: the window, the Ports tab,
-the Sites tab, the logs, the command line and the MCP server work as on Windows; the server management works
-differently, because Linux and macOS already have good packages for every server.
+the Sites tab, the logs, the command line and the MCP server are the same as on Windows; the server management works
+differently, because Linux and macOS already have good packages for every server. CI builds and tests every change on
+Ubuntu and macOS, and on Ubuntu it installs, starts and stops the system's Apache, PHP, MySQL, PostgreSQL and Redis
+plus Mailpit through Ninho's command line.
 
 1. Download `Ninho-linux-x64`, `Ninho-macos-arm64` or `Ninho-macos-x64` from the [latest release](https://github.com/phmrmkv/Ninho/releases/latest),
    run `chmod +x` on it and open it (on macOS, right-click > *Open* the first time: the program is not notarized).
