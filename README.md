@@ -9,7 +9,7 @@ Start Apache, MySQL, MariaDB, PostgreSQL, PHP, Node.js, Mailpit and Redis from o
 Download the newest stable Apache, PHP, MySQL, Node.js, Mailpit and Redis with one click. No installer: just open `Ninho.exe`.
 
 [Download](https://github.com/phmrmkv/Ninho/releases/latest) ·
-[Website](https://phmrmkv.github.io/Ninho/) ·
+[Website](https://ninho.phmr.com.br/) ·
 [Features](#features) ·
 [Quick start](#quick-start) ·
 [Roadmap](ROADMAP.md) ·
