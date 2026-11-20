@@ -122,7 +122,8 @@ Tools: **LAR** Laragon · **FLY** FlyEnv · **DOC** Docker Desktop · **DDEV** D
 - ✅ Portable and installable: Install on this PC (Start menu, Installed apps, no admin), uninstall keeps the data
 - ✅ Windows 64-bit and 32-bit builds, built and tested by GitHub Actions
 - ✅ Import from XAMPP, WampServer and Laragon: copies the sites and the databases, the old install is only read
-- 🟡 winget and Scoop packages: manifests ready, they go live after the first release
+- ✅ Scoop package: bucket live at phmrmkv/scoop-ninho (`scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho`)
+- 🟡 winget package: manifest for 0.6.2 submitted to microsoft/winget-pkgs (#479913), awaiting review; `winget install` works once it is merged
 - ⬜ Install a module as a Windows service (XAMPP)
 - 🟡 Linux and macOS: preview builds (servers from the package manager, run as the user on Ninho's own ports; Nginx, HTTPS and Xdebug still Windows-only) (FLY, DOC, DDEV, HERD, MAMP)
 - ➖ Containers (DOC, DDEV)
