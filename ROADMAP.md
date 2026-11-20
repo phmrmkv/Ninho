@@ -23,7 +23,7 @@ these ideas; no code or assets come from these tools.
 
 ## Next
 - Digital signature of `Ninho.exe`.
-- First release on winget (manifests of 0.6.2 sent to winget-pkgs, waiting for Microsoft's review) and on Scoop.
+- First release on winget (manifests of 0.6.2 sent to winget-pkgs, waiting for Microsoft's review). Scoop is live: `scoop bucket add ninho https://github.com/phmrmkv/scoop-ninho`.
 - Run a service from a Docker image when Docker is present.
 
 ### Linux and macOS
