@@ -238,7 +238,7 @@ servers your package manager installed (Mailpit and Node.js are downloaded), wit
 
 ## Roadmap
 
-MongoDB, Caddy, per-project config files, Linux and macOS and more: see
+Digital signature, winget and Scoop, Linux and macOS and more: see
 [FEATURES.md](FEATURES.md) (everything the other local servers offer, checked as it lands) and [ROADMAP.md](ROADMAP.md).
 
 ---
